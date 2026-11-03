@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "Harmgate",
+  "version": "0.1.0",
+  "description": "Blocks harmful sites by default. Runs locally and collects no browsing data.",
+  "minimum_chrome_version": "121",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoSe8kuapsUGh2p63Mn9B5BZjqbCwewmhXMGtCHlCCzUNAetWwTEdpiA9EQb61OaCS7NU4pApXlddPqhrhxr+lJk/uHNFIi2ZrT8P3rVPBGrDvpSahTMnPKWge509L/0oPJ/kpyZChHG9/i9od63Ht/HCvV4EToIGZH72ASqKhasRsWVH5Rj3GFvCA2eiyt4tXWA2h4SjzQ0B17hRgrEiRlT6B+AjY8NE+HVXaH/yKEmGGR0UKDolo778zVat6qv3PRACKW6IAoA2rv+Yqs74EP5lCx1uWVlzbS/pMS7EYPRbE8i1MiBgSZ9kfDexNsv8WmzZC90P2cxTklKiWKPazQIDAQAB",
+  "permissions": [
+    "declarativeNetRequest",
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Harmgate settings"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "block.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "adult",
+        "enabled": true,
+        "path": "rules/adult.json"
+      },
+      {
+        "id": "gambling",
+        "enabled": true,
+        "path": "rules/gambling.json"
+      },
+      {
+        "id": "gore",
+        "enabled": true,
+        "path": "rules/gore.json"
+      }
+    ]
+  }
+}

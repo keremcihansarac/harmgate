@@ -1,0 +1,37 @@
+# Domains that must never be blocked, even if an upstream list includes them.
+# One domain per line. Subdomains are covered too. Keep a note of why each is here.
+
+# News and sports media
+ekstrabladet.dk
+mundodeportivo.com
+sportingnews.com
+sportinglife.com
+cryptonews.com
+# Live scores
+flashscore.fr
+flashscore.com.br
+365scores.com
+aiscore.com
+# Search, film and video services
+yandex.by
+kinopoisk.ru
+nicovideo.jp
+dramaboxdb.com
+# Communities, hosting and general services
+knuddels.de
+postimage.org
+fc2.com
+character.ai
+histats.com
+weshop.ai
+# Charity lottery whose site is mainly about its social work
+aktion-mensch.de
+# General games, anime, manga and book sites
+gamersky.com
+silvergames.com
+37games.com
+gamepoint.com
+anime1.me
+mangakatana.com
+mangahere.cc
+czbooks.net

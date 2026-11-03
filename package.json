@@ -1,0 +1,25 @@
+{
+  "name": "harmgate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "lists": "node scripts/lists/build.mjs",
+    "lists:review": "node scripts/lists/review.mjs",
+    "typecheck": "tsc",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "spike:lists": "node spike/scripts/fetch-lists.mjs",
+    "spike:test": "node spike/scripts/run-spike.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.7",
+    "@types/node": "^22.20.5",
+    "playwright": "^1.64.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^5.1.0"
+  }
+}

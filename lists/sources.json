@@ -1,0 +1,10 @@
+{
+  "categories": ["gore", "gambling", "adult"],
+  "sources": [
+    { "id": "sinfonietta-snuff", "category": "gore", "url": "https://raw.githubusercontent.com/Sinfonietta/hostfiles/master/snuff-hosts", "license": "MIT", "homepage": "https://github.com/Sinfonietta/hostfiles", "minDomains": 10 },
+    { "id": "stevenblack-gambling", "category": "gambling", "url": "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/gambling-only/hosts", "license": "MIT", "homepage": "https://github.com/StevenBlack/hosts", "minDomains": 3000 },
+    { "id": "hagezi-gambling-mini", "category": "gambling", "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/gambling.mini-onlydomains.txt", "license": "GPL-3.0", "homepage": "https://github.com/hagezi/dns-blocklists", "minDomains": 50000 },
+    { "id": "stevenblack-porn", "category": "adult", "url": "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn-only/hosts", "license": "MIT", "homepage": "https://github.com/StevenBlack/hosts", "minDomains": 30000 },
+    { "id": "hagezi-nsfw", "category": "adult", "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/nsfw-onlydomains.txt", "license": "GPL-3.0", "homepage": "https://github.com/hagezi/dns-blocklists", "minDomains": 40000 }
+  ]
+}

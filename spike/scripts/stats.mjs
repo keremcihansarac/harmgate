@@ -1,0 +1,13 @@
+import { readList, compact } from './lib.mjs';
+const sb = await readList('stevenblack-gambling-porn');
+const nsfw = await readList('hagezi-nsfw');
+const mini = await readList('hagezi-gambling-mini');
+const medium = await readList('hagezi-gambling-medium');
+const full = await readList('hagezi-gambling-full');
+const show = (name, l) => { const c = compact(l); console.log(`${name}: raw=${l.length} unique=${new Set(l).size} compact=${c.length} json=${(JSON.stringify(c).length/1e6).toFixed(2)}MB`); };
+show('SB', sb); show('nsfw', nsfw); show('mini', mini); show('medium', medium); show('full', full);
+show('SB+nsfw', [...sb, ...nsfw]);
+show('SB+nsfw+mini', [...sb, ...nsfw, ...mini]);
+show('SB+nsfw+medium', [...sb, ...nsfw, ...medium]);
+show('SB+nsfw+full', [...sb, ...nsfw, ...full]);
+const overlap = new Set(sb); console.log('nsfw also in SB:', nsfw.filter(d => overlap.has(d)).length);

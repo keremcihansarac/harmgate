@@ -1,0 +1,2 @@
+# Hand-maintained additions to the gore category. One domain per line.
+# Upstream coverage for this category is thin, so contributions are welcome.

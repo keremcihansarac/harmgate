@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Harmgate settings</title>
+    <link rel="stylesheet" href="./lib/shared.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Harmgate</h1>
+      <p class="muted">Blocks harmful sites by default. Everything runs in your browser and no browsing data leaves it.</p>
+      <p id="incognito" class="warn small" hidden>Harmgate is not running in incognito windows. To turn it on, open this extension's details in <code>chrome://extensions</code> and enable "Allow in Incognito".</p>
+
+      <h2>Core filter</h2>
+      <div id="categories"></div>
+      <p class="small muted">Turning a category off takes a 60-second wait. Turning it on is instant.</p>
+
+      <h2>Allowed sites</h2>
+      <ul id="allowlist" class="plain"></ul>
+      <p id="allowlist-empty" class="small muted">No sites allowed. To allow one, open it and use the button on the block page.</p>
+
+      <h2>Blocklists</h2>
+      <p id="lists" class="small muted"></p>
+      <p class="small muted">Harmgate checks once a day for a newer list. That request goes to GitHub and contains nothing about your browsing.</p>
+    </main>
+    <script type="module" src="./options.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,29 @@
+name: Publish blocklists
+
+# Publishes to a rolling release rather than committing, so generated data stays out of the git history.
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Fails, and publishes nothing, if a source looks broken or a canary site would be blocked.
+      - run: npm run lists
+      - name: Upload to the lists release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view lists >/dev/null 2>&1 || gh release create lists --title "Blocklists" --notes "Refreshed weekly. Harmgate downloads these files as data." --latest=false
+          gh release upload lists lists-out/meta.json lists-out/adult.json lists-out/gambling.json lists-out/gore.json --clobber

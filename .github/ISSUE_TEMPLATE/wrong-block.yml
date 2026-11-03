@@ -1,0 +1,25 @@
+name: Wrong block
+description: A harmless site is blocked by the core filter.
+title: "Wrong block: "
+labels: ["wrong-block"]
+body:
+  - type: markdown
+    attributes:
+      value: This issue is public. Your GitHub account will appear next to the site name.
+  - type: input
+    id: host
+    attributes:
+      label: Blocked site
+    validations:
+      required: true
+  - type: input
+    id: category
+    attributes:
+      label: Category shown on the block page
+  - type: textarea
+    id: why
+    attributes:
+      label: What is this site?
+      description: A sentence or two on why it should not be blocked.
+    validations:
+      required: true
