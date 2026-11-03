@@ -2,13 +2,10 @@ import type { Category } from './constants';
 
 export type Message =
   | { type: 'status' }
-  | { type: 'request-disable'; category: Category }
-  | { type: 'confirm-disable'; category: Category }
-  | { type: 'cancel-disable'; category: Category }
+  | { type: 'gate-tick'; key: string }
+  | { type: 'gate-cancel'; key: string }
+  | { type: 'gate-confirm'; key: string; phrase: string }
   | { type: 'enable'; category: Category }
-  | { type: 'request-allow'; host: string }
-  | { type: 'confirm-allow'; host: string }
-  | { type: 'cancel-allow'; host: string }
   | { type: 'remove-allow'; host: string };
 
 export interface Status {
@@ -18,6 +15,8 @@ export interface Status {
   bundledVersion: string;
   now: number;
 }
+
+export interface GateTick { readyAt: number; now: number }
 
 export interface Reply<T = unknown> { ok: boolean; error?: string; value?: T }
 

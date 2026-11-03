@@ -7,9 +7,11 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   gore: 'Gore and extreme violence',
 };
 
-export const WAIT_MS = 60_000;
-/** A finished wait stays usable for this long, then the person has to wait again. */
-export const CONFIRM_WINDOW_MS = 5 * 60_000;
+export const WAIT_MS = 5 * 60_000;
+/** The open settings tab reports in this often while it is in front. */
+export const HEARTBEAT_MS = 5_000;
+/** A longer silence, or a clock change, ends the wait: the tab was left or the time was moved. */
+export const HEARTBEAT_GAP_MS = 20_000;
 
 export const REPO_URL = 'https://github.com/keremcihansarac/harmgate';
 export const LISTS_BASE_URL = `${REPO_URL}/releases/download/lists`;

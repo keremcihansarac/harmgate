@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "description": "Blocks harmful sites by default. Runs locally and collects no browsing data.",
   "minimum_chrome_version": "121",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoSe8kuapsUGh2p63Mn9B5BZjqbCwewmhXMGtCHlCCzUNAetWwTEdpiA9EQb61OaCS7NU4pApXlddPqhrhxr+lJk/uHNFIi2ZrT8P3rVPBGrDvpSahTMnPKWge509L/0oPJ/kpyZChHG9/i9od63Ht/HCvV4EToIGZH72ASqKhasRsWVH5Rj3GFvCA2eiyt4tXWA2h4SjzQ0B17hRgrEiRlT6B+AjY8NE+HVXaH/yKEmGGR0UKDolo778zVat6qv3PRACKW6IAoA2rv+Yqs74EP5lCx1uWVlzbS/pMS7EYPRbE8i1MiBgSZ9kfDexNsv8WmzZC90P2cxTklKiWKPazQIDAQAB",
   "permissions": [
     "declarativeNetRequest",
     "storage",
@@ -18,7 +17,12 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Harmgate settings"
+    "default_title": "Harmgate settings",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
   },
   "options_ui": {
     "page": "options.html",
@@ -52,5 +56,12 @@
         "path": "rules/gore.json"
       }
     ]
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoSe8kuapsUGh2p63Mn9B5BZjqbCwewmhXMGtCHlCCzUNAetWwTEdpiA9EQb61OaCS7NU4pApXlddPqhrhxr+lJk/uHNFIi2ZrT8P3rVPBGrDvpSahTMnPKWge509L/0oPJ/kpyZChHG9/i9od63Ht/HCvV4EToIGZH72ASqKhasRsWVH5Rj3GFvCA2eiyt4tXWA2h4SjzQ0B17hRgrEiRlT6B+AjY8NE+HVXaH/yKEmGGR0UKDolo778zVat6qv3PRACKW6IAoA2rv+Yqs74EP5lCx1uWVlzbS/pMS7EYPRbE8i1MiBgSZ9kfDexNsv8WmzZC90P2cxTklKiWKPazQIDAQAB",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
   }
 }

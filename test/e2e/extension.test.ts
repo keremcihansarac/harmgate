@@ -54,7 +54,11 @@ async function launch(extDir: string, profile: string): Promise<Session> {
     headless: true,
     args: [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`, '--host-resolver-rules=MAP *.test ~NOTFOUND'],
   });
-  const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+  // The worker can register before a listener attaches, so poll rather than wait for the event.
+  const deadline = Date.now() + 30000;
+  while (!context.serviceWorkers()[0] && Date.now() < deadline) await sleep(50);
+  const worker = context.serviceWorkers()[0];
+  if (!worker) throw new Error('Service worker did not start');
   return { context, worker, id: new URL(worker.url()).host, extDir, profile };
 }
 
@@ -88,14 +92,24 @@ async function message(s: Session, msg: unknown): Promise<{ ok: boolean; error?:
   return reply;
 }
 
-/** Shifts a running wait into the past, so tests need not sit through 60 real seconds. */
+/** Shifts a running wait into the past, so tests need not sit through five real minutes. */
 async function finishWait(s: Session, key: string) {
   await s.worker.evaluate(async (k) => {
-    const { state } = (await chrome.storage.local.get('state')) as { state: { pending: Record<string, number> } };
-    state.pending[k] = Date.now() - 61_000;
+    const { state } = (await chrome.storage.local.get('state')) as { state: { pending: Record<string, unknown> } };
+    state.pending[k] = { startedAt: Date.now() - 301_000, lastSeen: Date.now() };
     await chrome.storage.local.set({ state });
   }, key);
 }
+
+/** Goes through a whole gate at the message level. */
+async function passGate(s: Session, key: string, phrase: string) {
+  expect((await message(s, { type: 'gate-tick', key })).ok).toBe(true);
+  await finishWait(s, key);
+  const reply = await message(s, { type: 'gate-confirm', key, phrase });
+  expect(reply).toMatchObject({ ok: true });
+}
+
+const DISABLE_ADULT = 'I choose to turn off the filter for adult content.';
 
 interface LastCheck { at: number; ok: boolean; error?: string }
 
@@ -209,6 +223,35 @@ describe('Harmgate extension', () => {
     expect(text).not.toContain('Problem');
   });
 
+  it('ships every icon the manifest names, and uses one as the page icon', async () => {
+    const s = await fresh();
+    const page = await s.context.newPage();
+    await page.goto(`chrome-extension://${s.id}/options.html`);
+    const result = await page.evaluate(async () => {
+      const manifest = chrome.runtime.getManifest();
+      const paths = [...Object.values(manifest.icons ?? {}), ...Object.values((manifest.action?.default_icon ?? {}) as Record<string, string>)];
+      const sizes = await Promise.all(paths.map(async (path) => {
+        const image = new Image();
+        image.src = chrome.runtime.getURL(path);
+        await image.decode();
+        // A clear corner means the icon has no white box around it on dark browser themes.
+        const ctx = new OffscreenCanvas(image.naturalWidth, image.naturalHeight).getContext('2d')!;
+        ctx.drawImage(image, 0, 0);
+        return [path, image.naturalWidth, ctx.getImageData(0, 0, 1, 1).data[3]] as const;
+      }));
+      const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')!;
+      const icon = await fetch(link.href);
+      return { sizes, pageIcon: icon.ok };
+    });
+    expect(result.sizes.length).toBe(7);
+    for (const [path, width, cornerAlpha] of result.sizes) {
+      expect(path).toContain(`icon-${width}.png`);
+      expect(cornerAlpha).toBe(0);
+    }
+    expect(result.pageIcon).toBe(true);
+    await page.close();
+  });
+
   it('renders the block page in English with the host, and removes its buttons when framed', async () => {
     const s = await fresh();
     await expectBlocked(s, PROBES.gambling, true);
@@ -219,8 +262,8 @@ describe('Harmgate extension', () => {
     expect(await page.locator('#host').innerText()).toBe(PROBES.gambling);
     expect(await page.locator('#reason').innerText()).toContain('Gambling and betting');
     expect(await page.locator('#report').getAttribute('href')).toContain(`host=${PROBES.gambling}`);
-    // Settings must stay out of reach from here, so that giving in takes more than one click.
-    expect(await page.getByRole('button', { name: /settings/i }).count()).toBe(0);
+    // Nothing on this page may make giving in easy: no route to settings, no way to allow the site.
+    expect(await page.getByRole('button').allInnerTexts()).toEqual(['Go back']);
     expect(await page.locator('a[href*="options.html"]').count()).toBe(0);
     await page.close();
 
@@ -244,20 +287,21 @@ describe('Harmgate extension', () => {
     await page.close();
   });
 
-  it('requires the wait to turn a category off, then keeps it off through restarts and reloads', async () => {
+  it('requires the wait and the sentence to turn a category off, then keeps it off through restarts and updates', async () => {
     const s = await fresh();
+    const key = 'disable:adult';
     await expectBlocked(s, PROBES.adult, true);
-    expect((await message(s, { type: 'confirm-disable', category: 'adult' })).ok).toBe(false);
-    const started = await message(s, { type: 'request-disable', category: 'adult' });
-    expect(started.ok).toBe(true);
-    expect(started.value.readyAt - started.value.now).toBeGreaterThan(55_000);
-    const early = await message(s, { type: 'confirm-disable', category: 'adult' });
-    expect(early.ok).toBe(false);
-    expect(early.error).toContain('wait');
+    expect((await message(s, { type: 'gate-confirm', key, phrase: DISABLE_ADULT })).ok).toBe(false);
+    const started = await message(s, { type: 'gate-tick', key });
+    expect(started.value.readyAt - started.value.now).toBeGreaterThan(295_000);
+    const early = await message(s, { type: 'gate-confirm', key, phrase: DISABLE_ADULT });
+    expect(early).toMatchObject({ ok: false, error: 'The wait has not finished' });
+    await finishWait(s, key);
+    const wrong = await message(s, { type: 'gate-confirm', key, phrase: 'yes' });
+    expect(wrong).toMatchObject({ ok: false, error: 'The sentence does not match' });
     await expectBlocked(s, PROBES.adult, true);
 
-    await finishWait(s, 'disable:adult');
-    expect((await message(s, { type: 'confirm-disable', category: 'adult' })).ok).toBe(true);
+    expect((await message(s, { type: 'gate-confirm', key, phrase: DISABLE_ADULT })).ok).toBe(true);
     await expectBlocked(s, PROBES.adult, false);
     await expectBlocked(s, PROBES.gambling, true);
 
@@ -283,21 +327,38 @@ describe('Harmgate extension', () => {
     await expectBlocked(updated, PROBES.adult, true);
   });
 
-  it('turns a category off through the settings page buttons', async () => {
+  it('turns a category off through the settings page, with no pasting', async () => {
     const s = await fresh();
+    const key = 'disable:gambling';
+    const phrase = 'I choose to turn off the filter for gambling and betting.';
     const page = await s.context.newPage();
     await page.goto(`chrome-extension://${s.id}/options.html`);
     const card = page.locator('.card', { hasText: 'Gambling and betting' });
+
     await card.getByRole('button', { name: 'Turn off…' }).click();
-    await expect.poll(() => card.getByRole('button', { name: /^Turn off \(\d+s\)$/ }).isDisabled()).toBe(true);
+    await expect.poll(() => card.locator('.gate').innerText()).toContain('Time left: 5:00');
+    expect(await card.getByRole('textbox').isVisible()).toBe(false);
+    expect(await card.getByRole('button', { name: 'Confirm' }).isVisible()).toBe(false);
+    expect(await card.locator('.phrase').isVisible()).toBe(false);
     await card.getByRole('button', { name: 'Keep on' }).click();
     await card.getByRole('button', { name: 'Turn off…' }).waitFor();
 
     await card.getByRole('button', { name: 'Turn off…' }).click();
-    await card.getByRole('button', { name: /^Turn off \(\d+s\)$/ }).waitFor();
-    await finishWait(s, 'disable:gambling');
-    await page.reload();
-    await card.getByRole('button', { name: 'Turn off now' }).click();
+    await card.locator('.gate').waitFor();
+    await finishWait(s, key);
+    const input = card.getByRole('textbox');
+    await input.waitFor({ timeout: 10000 });
+    const confirm = card.getByRole('button', { name: 'Confirm' });
+    expect(await confirm.isDisabled()).toBe(true);
+
+    const pasteAllowed = await input.evaluate((node) =>
+      node.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true })));
+    expect(pasteAllowed).toBe(false);
+
+    await input.pressSequentially(phrase.slice(0, -1));
+    expect(await confirm.isDisabled()).toBe(true);
+    await input.pressSequentially('.');
+    await confirm.click();
     await card.getByRole('button', { name: 'Turn on' }).waitFor();
     await expectBlocked(s, PROBES.gambling, false);
     await card.getByRole('button', { name: 'Turn on' }).click();
@@ -305,36 +366,59 @@ describe('Harmgate extension', () => {
     await page.close();
   });
 
-  it('allows a blocked site only after the wait, and can undo it', async () => {
+  it('starts the wait over when the tab stops reporting in', async () => {
     const s = await fresh();
+    const key = 'disable:adult';
+    const first = await message(s, { type: 'gate-tick', key });
+    await s.worker.evaluate(async (k) => {
+      const { state } = (await chrome.storage.local.get('state')) as { state: { pending: Record<string, unknown> } };
+      state.pending[k] = { startedAt: Date.now() - 301_000, lastSeen: Date.now() - 25_000 };
+      await chrome.storage.local.set({ state });
+    }, key);
+    expect(await message(s, { type: 'gate-confirm', key, phrase: DISABLE_ADULT })).toMatchObject({ ok: false, error: 'The wait has not finished' });
+    const restarted = await message(s, { type: 'gate-tick', key });
+    expect(restarted.value.readyAt).toBeGreaterThan(first.value.readyAt);
+    expect(restarted.value.readyAt - restarted.value.now).toBeGreaterThan(295_000);
+  });
+
+  it('allows a blocked site only after the wait and the sentence, and can undo it', async () => {
+    const s = await fresh();
+    const key = `allow:${PROBES.adult}`;
+    const phrase = `I choose to allow ${PROBES.adult}.`;
     await expectBlocked(s, PROBES.adult, true);
-    expect((await message(s, { type: 'confirm-allow', host: PROBES.adult })).ok).toBe(false);
-    expect((await message(s, { type: 'request-allow', host: 'not a domain' })).ok).toBe(false);
-    expect((await message(s, { type: 'request-allow', host: PROBES.adult })).ok).toBe(true);
-    await finishWait(s, `allow:${PROBES.adult}`);
-    expect((await message(s, { type: 'confirm-allow', host: PROBES.adult })).ok).toBe(true);
+    expect((await message(s, { type: 'gate-confirm', key, phrase })).ok).toBe(false);
+    expect((await message(s, { type: 'gate-tick', key: 'allow:not a domain' })).ok).toBe(false);
+    await passGate(s, key, phrase);
     await expectBlocked(s, PROBES.adult, false);
     await expectBlocked(s, PROBES.gambling, true);
     expect((await message(s, { type: 'remove-allow', host: PROBES.adult })).ok).toBe(true);
     await expectBlocked(s, PROBES.adult, true);
   });
 
-  it('allows a site through the block page buttons', async () => {
+  it('allows a site through the settings form, keeping only the host of a pasted address', async () => {
     const s = await fresh();
     await expectBlocked(s, PROBES.gore, true);
     const page = await s.context.newPage();
-    await page.clock.install();
-    await page.goto(`http://${PROBES.gore}/`).catch(() => undefined);
-    const allow = page.locator('#allow');
-    await allow.waitFor();
-    await allow.click();
-    await expect.poll(() => allow.isDisabled()).toBe(true);
-    expect(await allow.innerText()).toMatch(/\(\d+s\)/);
+    await page.goto(`chrome-extension://${s.id}/options.html`);
+    const form = page.locator('#allow-form');
+    await page.locator('#allow-host').fill('not a site');
+    await form.getByRole('button', { name: 'Allow a site…' }).click();
+    await page.locator('#allow-error').waitFor();
+
+    await page.locator('#allow-host').fill(`https://${PROBES.gore}/some/page?x=1`);
+    await form.getByRole('button', { name: 'Allow a site…' }).click();
+    await form.locator('.gate').waitFor();
+    expect(await page.locator('#allow-error').isVisible()).toBe(false);
     await finishWait(s, `allow:${PROBES.gore}`);
-    await page.clock.fastForward(61_000);
-    await expect.poll(() => allow.innerText()).toBe(`Allow ${PROBES.gore} now`);
-    await allow.click();
+    const input = form.locator('.gate input');
+    await input.waitFor({ timeout: 10000 });
+    await input.pressSequentially(`I choose to allow ${PROBES.gore}.`);
+    await form.getByRole('button', { name: 'Confirm' }).click();
+    await page.locator('#allowlist').getByText(PROBES.gore).waitFor();
     await expectBlocked(s, PROBES.gore, false);
+
+    await page.locator('#allowlist').getByRole('button', { name: 'Remove' }).click();
+    await expectBlocked(s, PROBES.gore, true);
     await page.close();
   });
 
@@ -357,17 +441,13 @@ describe('Harmgate extension', () => {
     expect(await enabledRulesets(again)).not.toContain('adult');
 
     // Allowed sites outrank refreshed rules too.
-    await message(again, { type: 'request-allow', host: 'harmgate-new.test' });
-    await finishWait(again, 'allow:harmgate-new.test');
-    expect((await message(again, { type: 'confirm-allow', host: 'harmgate-new.test' })).ok).toBe(true);
+    await passGate(again, 'allow:harmgate-new.test', 'I choose to allow harmgate-new.test.');
     await expectBlocked(again, 'harmgate-new.test', false);
     await message(again, { type: 'remove-allow', host: 'harmgate-new.test' });
 
     // Off removes the refreshed rule. On falls back to the bundled list at once.
     served = {};
-    await message(again, { type: 'request-disable', category: 'adult' });
-    await finishWait(again, 'disable:adult');
-    expect((await message(again, { type: 'confirm-disable', category: 'adult' })).ok).toBe(true);
+    await passGate(again, 'disable:adult', DISABLE_ADULT);
     await expectBlocked(again, 'harmgate-new.test', false);
     expect((await message(again, { type: 'enable', category: 'adult' })).ok).toBe(true);
     await expectBlocked(again, PROBES.adult, true);

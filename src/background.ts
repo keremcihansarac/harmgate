@@ -1,8 +1,8 @@
-import { WAIT_MS, isCategory, isValidDomain } from './lib/constants';
-import type { Message, Reply, Status } from './lib/messages';
+import { WAIT_MS, isCategory } from './lib/constants';
+import type { GateTick, Message, Reply, Status } from './lib/messages';
 import { bundledInfo, refreshLists } from './lib/refresh';
 import { activeCategories, syncRules } from './lib/rules';
-import { allowKey, disableKey, loadState, pendingStatus, saveState, startPending } from './lib/state';
+import { disableKey, gatePhrase, loadState, parseGateKey, pendingStatus, saveState, touchPending } from './lib/state';
 
 const ALARM = 'lists-check';
 const CHECK_MINUTES = 24 * 60;
@@ -44,47 +44,35 @@ async function handle(message: Message): Promise<unknown> {
       const bundled = await bundledInfo();
       return { state, active: await activeCategories(), counts: bundled.counts, bundledVersion: bundled.version, now } satisfies Status;
     }
-    case 'request-disable': {
-      if (!isCategory(message.category)) throw new Error('Unknown category');
-      const startedAt = startPending(state, disableKey(message.category), now);
+    case 'gate-tick': {
+      if (!parseGateKey(message.key)) throw new Error('Unknown action');
+      const wait = touchPending(state, message.key, now);
       await saveState(state);
-      return { readyAt: startedAt + WAIT_MS, now };
+      return { readyAt: wait.startedAt + WAIT_MS, now } satisfies GateTick;
     }
-    case 'confirm-disable': {
-      if (!isCategory(message.category)) throw new Error('Unknown category');
-      const key = disableKey(message.category);
-      if (pendingStatus(state.pending[key], now) !== 'ready') throw new Error('The wait has not finished');
-      delete state.pending[key];
-      state.enabled[message.category] = false;
-      delete state.applied[message.category];
+    case 'gate-cancel':
+      delete state.pending[message.key];
+      return saveState(state);
+    case 'gate-confirm': {
+      const gate = parseGateKey(message.key);
+      if (!gate) throw new Error('Unknown action');
+      if (pendingStatus(state.pending[message.key], now) !== 'ready') throw new Error('The wait has not finished');
+      if (message.phrase !== gatePhrase(gate)) throw new Error('The sentence does not match');
+      delete state.pending[message.key];
+      if (gate.kind === 'disable') {
+        state.enabled[gate.category] = false;
+        delete state.applied[gate.category];
+      } else if (!state.allowlist.includes(gate.host)) {
+        state.allowlist.push(gate.host);
+      }
       return finish();
     }
-    case 'cancel-disable':
-      delete state.pending[disableKey(message.category)];
-      return saveState(state);
     case 'enable': {
       if (!isCategory(message.category)) throw new Error('Unknown category');
       state.enabled[message.category] = true;
       delete state.pending[disableKey(message.category)];
       return finish();
     }
-    case 'request-allow': {
-      if (!isValidDomain(message.host)) throw new Error('Invalid site');
-      const startedAt = startPending(state, allowKey(message.host), now);
-      await saveState(state);
-      return { readyAt: startedAt + WAIT_MS, now };
-    }
-    case 'confirm-allow': {
-      if (!isValidDomain(message.host)) throw new Error('Invalid site');
-      const key = allowKey(message.host);
-      if (pendingStatus(state.pending[key], now) !== 'ready') throw new Error('The wait has not finished');
-      delete state.pending[key];
-      if (!state.allowlist.includes(message.host)) state.allowlist.push(message.host);
-      return finish();
-    }
-    case 'cancel-allow':
-      delete state.pending[allowKey(message.host)];
-      return saveState(state);
     case 'remove-allow':
       state.allowlist = state.allowlist.filter((h) => h !== message.host);
       return finish();

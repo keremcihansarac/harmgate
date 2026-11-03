@@ -1,10 +1,15 @@
-import { CATEGORIES, CONFIRM_WINDOW_MS, WAIT_MS, type Category } from './constants';
+import { CATEGORIES, CATEGORY_LABELS, HEARTBEAT_GAP_MS, WAIT_MS, isCategory, isValidDomain, type Category } from './constants';
+
+export interface PendingWait {
+  startedAt: number;
+  lastSeen: number;
+}
 
 export interface State {
   enabled: Record<Category, boolean>;
   allowlist: string[];
-  /** When each waiting action started, keyed by action, in epoch milliseconds. */
-  pending: Record<string, number>;
+  /** Waits in progress, keyed by gate key. */
+  pending: Record<string, PendingWait>;
   /** List version of the refreshed rule in use, per category. Absent means the bundled ruleset. */
   applied: Partial<Record<Category, string>>;
   lastCheck: { at: number; ok: boolean; error?: string } | null;
@@ -26,23 +31,40 @@ export async function loadState(): Promise<State> {
 
 export const saveState = (state: State): Promise<void> => chrome.storage.local.set({ state });
 
-export type PendingStatus = 'none' | 'waiting' | 'ready' | 'expired';
+export type PendingStatus = 'none' | 'waiting' | 'ready';
 
-export function pendingStatus(startedAt: number | undefined, now: number): PendingStatus {
-  if (startedAt === undefined) return 'none';
-  const elapsed = now - startedAt;
-  if (elapsed < 0) return 'expired';
-  if (elapsed < WAIT_MS) return 'waiting';
-  return elapsed <= WAIT_MS + CONFIRM_WINDOW_MS ? 'ready' : 'expired';
+/** A wait only counts while the tab keeps reporting in. A silence or a clock jump in either direction ends it. */
+export function pendingStatus(wait: PendingWait | undefined, now: number): PendingStatus {
+  if (!wait || typeof wait.lastSeen !== 'number') return 'none';
+  const silence = now - wait.lastSeen;
+  if (silence < 0 || silence > HEARTBEAT_GAP_MS || now < wait.startedAt) return 'none';
+  return now - wait.startedAt < WAIT_MS ? 'waiting' : 'ready';
 }
 
-/** Starts a wait, keeping one already running so that retrying cannot change it. */
-export function startPending(state: State, key: string, now: number): number {
-  const status = pendingStatus(state.pending[key], now);
-  if (status === 'waiting' || status === 'ready') return state.pending[key]!;
-  state.pending[key] = now;
-  return now;
+/** Records that the tab is still here, or starts over if the wait was broken. */
+export function touchPending(state: State, key: string, now: number): PendingWait {
+  const current = state.pending[key];
+  const wait: PendingWait = current && pendingStatus(current, now) !== 'none' ? { ...current, lastSeen: now } : { startedAt: now, lastSeen: now };
+  state.pending[key] = wait;
+  return wait;
 }
+
+export type Gate = { kind: 'disable'; category: Category } | { kind: 'allow'; host: string };
 
 export const disableKey = (category: Category) => `disable:${category}`;
 export const allowKey = (host: string) => `allow:${host}`;
+
+export function parseGateKey(key: unknown): Gate | null {
+  if (typeof key !== 'string') return null;
+  const [kind, value] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+  if (kind === 'disable' && isCategory(value)) return { kind, category: value };
+  if (kind === 'allow' && isValidDomain(value)) return { kind, host: value };
+  return null;
+}
+
+/** The sentence a person has to type by hand before the action goes through. */
+export function gatePhrase(gate: Gate): string {
+  return gate.kind === 'disable'
+    ? `I choose to turn off the filter for ${CATEGORY_LABELS[gate.category].toLowerCase()}.`
+    : `I choose to allow ${gate.host}.`;
+}
