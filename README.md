@@ -20,7 +20,7 @@ Harmgate is not in the Chrome Web Store. [Install it from GitHub](docs/INSTALL.m
 
 ## What it cannot do
 
-- **It does not stop someone determined.** Anyone can remove an extension at `chrome://extensions`, and no extension can prevent that. It raises the effort of giving in. It is not a lock for a child's computer yet; a locked setup is [planned](docs/ROADMAP.md).
+- **It does not stop someone determined.** Anyone using the browser can remove Harmgate or turn off developer mode, which also turns Harmgate off. No extension can prevent that. It raises the effort of giving in. It is not a lock for a child's computer; the [roadmap](docs/ROADMAP.md) covers what browser policies may add.
 - **It covers one browser profile.** Incognito windows are only covered if you turn that on, and the settings page tells you how. Other browsers and apps are not covered.
 - **No list is complete.** New sites appear daily, and the gore list has only 23 sites so far.
 - **It blocks whole sites.** It cannot filter what appears inside X or Reddit, only close them.
@@ -50,6 +50,18 @@ Then load `dist/` as an unpacked extension. The [roadmap](docs/ROADMAP.md) recor
 ## Contributing
 
 The most useful help right now is reporting wrongly blocked sites, and harmful sites the lists miss. Open an [issue](https://github.com/keremcihansarac/harmgate/issues).
+
+Issues are public. Never post a link to illegal content, such as child sexual abuse material. Report that to your national hotline, which you can find through [INHOPE](https://www.inhope.org).
+
+To report a security problem, see [SECURITY.md](SECURITY.md).
+
+## Disclaimer
+
+Harmgate comes with no warranty, as set out in the [license](LICENSE). It does not catch everything and does not replace an adult's care for a child.
+
+The blocklists come from third parties. A site being on them only means a list classed it that way. It is not a statement about the site or its owner, and wrong entries can be [reported](https://github.com/keremcihansarac/harmgate/issues).
+
+Harmgate is an independent project, not affiliated with or endorsed by Google. Chrome and the other product names here are trademarks of their owners.
 
 ## License
 

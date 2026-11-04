@@ -13,6 +13,8 @@ Harmgate is distributed through GitHub rather than the Chrome Web Store, so you 
 
 The Harmgate settings page opens, and the filter is already on.
 
+**Leave Developer mode on.** Chrome turns off extensions installed this way when developer mode is off, and that includes the filter.
+
 To reach the settings later, pin Harmgate from the puzzle-piece menu next to the address bar and click its shield.
 
 ## Check that it works
@@ -41,6 +43,6 @@ Your limits and allowed sites stay. If you remove Harmgate at `chrome://extensio
 
 **Does it work in Edge or Brave?** They use the same engine and have the same "Load unpacked" option, but Harmgate has not been tested in them.
 
-**Can a child turn it off?** The filter has no off switch, but anyone with access to `chrome://extensions` can remove the extension. A locked setup for families is [planned](ROADMAP.md).
+**Can a child turn it off?** The filter has no off switch of its own, but anyone using the browser can remove the extension or turn off developer mode. Harmgate alone is not a lock. The [roadmap](ROADMAP.md) covers what browser policies may add.
 
 **A site is blocked by mistake.** Use **Report on GitHub** on the block page, so the list gets fixed for everyone. To use the site in the meantime, go to **Allowed sites** in settings.

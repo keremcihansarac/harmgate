@@ -5,7 +5,7 @@ labels: ["wrong-block"]
 body:
   - type: markdown
     attributes:
-      value: This issue is public. Your GitHub account will appear next to the site name.
+      value: This issue is public. Your GitHub account will appear next to the site name. Never post a link to illegal content; report that to your national hotline, which you can find at https://www.inhope.org.
   - type: input
     id: host
     attributes:

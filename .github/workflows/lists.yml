@@ -26,4 +26,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view lists >/dev/null 2>&1 || gh release create lists --title "Blocklists" --notes "Refreshed weekly. Harmgate downloads these files as data." --latest=false
-          gh release upload lists lists-out/meta.json lists-out/adult.json lists-out/gambling.json lists-out/gore.json --clobber
+          gh release upload lists lists-out/meta.json lists-out/adult.json lists-out/gambling.json lists-out/gore.json LICENSE THIRD_PARTY_NOTICES.md --clobber

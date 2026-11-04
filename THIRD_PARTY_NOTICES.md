@@ -1,6 +1,6 @@
 # Third-party notices
 
-Harmgate's code is licensed under GPL-3.0. Its blocklists are built from the sources below, which keep their own licenses.
+Harmgate's code is licensed under GPL-3.0. Its blocklists are built from the sources below, which keep their own licenses. Harmgate changes this material: it combines the lists, removes duplicates, removes the sites in `lists/allowlist.txt`, and converts the result into browser rules.
 
 | Source | Used for | License |
 |---|---|---|
@@ -13,12 +13,28 @@ StevenBlack's gambling and porn lists combine these sources:
 | Source | License |
 |---|---|
 | [bigdargon/hostsVN](https://github.com/bigdargon/hostsVN) | MIT |
-| [Clefspeare13/pornhosts](https://github.com/Clefspeare13/pornhosts) | MIT |
+| [Clefspeare13/pornhosts](https://github.com/Clefspeare13/pornhosts) ¹ | MIT |
 | [Sinfonietta/hostfiles](https://github.com/Sinfonietta/hostfiles) | MIT |
-| [brijrajparmar27/host-sources](https://github.com/brijrajparmar27/host-sources) | CC BY 4.0 |
+| [brijrajparmar27/host-sources](https://github.com/brijrajparmar27/host-sources) ² | CC BY 4.0 |
 | [tiuxo/hosts](https://github.com/tiuxo/hosts) | CC BY 4.0 |
 
-Hagezi's lists draw on further upstream sources of their own, which are listed in that project.
+¹ GitHub currently blocks access to this repository, so its license text could not be read. The license shown is the one StevenBlack/hosts records for it.
+
+² This repository has no license file. The license shown is the one StevenBlack/hosts records for it.
+
+Hagezi's lists draw on further upstream sources of their own, which are listed in that project. CC BY 4.0 material is used under the [Creative Commons Attribution 4.0 license](https://creativecommons.org/licenses/by/4.0/). The GPL-3.0 text is in [LICENSE](LICENSE).
+
+If you own one of these sources and something here is wrong, please open an issue.
+
+## MIT License notices for blocklist sources
+
+Copyright (c) 2026 Steven Black (StevenBlack/hosts)
+
+Copyright (c) 2016 Sinfonietta (Sinfonietta/hostfiles)
+
+Copyright (c) 2026 BigDargon (bigdargon/hostsVN)
+
+Each of these is used under the same terms as the MIT License text in the Logo section below.
 
 ## Logo
 

@@ -40,20 +40,33 @@ Done when the filter works right after install and refreshes its list by itself.
 
 Done when someone can set up and manage their own limits.
 
-### Phase 3: Release
+### Phase 3: Release (done for Chrome)
 
 - README, install guide, privacy note, CI, GitHub Releases, new-version notice.
-- Signed Firefox build. Firefox allows distribution outside its store with automatic updates; still to be tested from GitHub.
 
 Done when a stranger can install it in a few minutes by following the guide.
 
-### Phase 4: Family mode
+### Phase 4: Family mode for Chrome (in progress)
 
-- Locked install on Firefox through policies. Chrome force-install on Windows and macOS needs the Web Store, so Chrome relies on family DNS and SafeSearch settings.
-- Policies that also shut the remaining exits, such as blocking `chrome://extensions` and incognito windows.
-- Setup scripts and a guide. These policy routes are untested on home computers and need testing here.
+What Chromium's source and policy definitions say:
 
-Done when the filter cannot easily be disabled from a child account by following the guide.
+- Installing from outside the Web Store by policy needs a managed computer (MDM, a domain or Chrome Enterprise Core), so a home computer cannot force-install Harmgate or stop it being removed.
+- Harmgate depends on developer mode, because Chrome turns off unpacked extensions without it. Disallowing developer mode by policy would therefore turn the filter off.
+- `IncognitoModeAvailability` and `URLBlocklist` for `chrome://extensions` worked in a test on a home Mac with no device management: macOS 26.3 and Chrome 156, using a manually installed configuration profile. Incognito would not open and the extensions page was blocked. `BrowserGuestModeEnabled` and `BrowserAddPersonEnabled` were in the same profile but not checked. Chromium warns that blocking internal pages can be worked around.
+- With those policies on, Harmgate could still be removed from Chrome's toolbar menu.
+
+Next steps:
+
+- Write a setup guide for Mac that is honest about what stays open, together with a child account without admin rights, family DNS and SafeSearch.
+- Test whether a child account can undo the setup.
+- Test on Windows before claiming support there.
+
+Done when the guide has been followed on a real computer and says exactly what it does and does not close.
+
+### On hold
+
+- Firefox. Mozilla allows signed distribution outside its store; compatibility and signing are untested.
+- Safari. A free install from GitHub is not practical: Apple's "Allow unsigned extensions" setting resets when Safari quits. A Mac app signed with Developer ID needs a paid Apple membership, and iPhone needs the App Store.
 
 ### Phase 5: Growth
 
@@ -67,5 +80,5 @@ Done when the filter cannot easily be disabled from a child account by following
 - No list is complete, and some harmless sites will be blocked by mistake.
 - The gore category covers very few sites so far.
 - Sites can detect that Harmgate is installed, because the block page must be reachable from the web for redirects to work.
-- An extension covers one browser profile. It does not run in incognito by default. Chrome lets anyone remove an extension from `chrome://extensions`, and no code inside the extension can prevent that; only a browser policy can.
+- An extension covers one browser profile. It does not run in incognito by default. Chrome lets anyone remove an extension, or turn off the developer mode it depends on, and no code inside the extension can prevent that.
 - Putting this many domains in one rule works in testing but is not explicitly guaranteed by Chrome. The fallback is splitting the list across many rules.
