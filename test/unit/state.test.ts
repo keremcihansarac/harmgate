@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { HEARTBEAT_GAP_MS, WAIT_MS, isValidDomain } from '../../src/lib/constants';
 import { validateList } from '../../src/lib/refresh';
 import { desiredRules } from '../../src/lib/rules';
-import { defaultState, gatePhrase, parseGateKey, pendingStatus, touchPending } from '../../src/lib/state';
+import { defaultState, gatePhrase, limitChangeKey, parseGateKey, pendingStatus, touchPending } from '../../src/lib/state';
 
 describe('pendingStatus', () => {
   const t = 1_000_000;
@@ -50,14 +50,22 @@ describe('touchPending', () => {
 
 describe('gate keys', () => {
   it('reads valid keys and refuses the rest', () => {
-    expect(parseGateKey('disable:adult')).toEqual({ kind: 'disable', category: 'adult' });
     expect(parseGateKey('allow:a.com')).toEqual({ kind: 'allow', host: 'a.com' });
-    for (const bad of ['disable:evil', 'allow:not a domain', 'nope', 'other:a.com', null, 5]) expect(parseGateKey(bad)).toBeNull();
+    const schedule = { days: [1], start: 60, end: 120 };
+    expect(parseGateKey('limit-remove:site3')).toEqual({ kind: 'limit-remove', id: 'site3' });
+    expect(parseGateKey(limitChangeKey('reddit', schedule))).toEqual({ kind: 'limit-change', id: 'reddit', schedule });
+    for (const bad of [
+      'disable:adult', 'disable:evil', 'allow:not a domain', 'nope', 'other:a.com', null, 5,
+      'limit-remove:', 'limit-remove:a b', 'limit-change:reddit', 'limit-change::{}', 'limit-change:reddit:{bad',
+      'limit-change:reddit:null', 'limit-change:reddit:{"days":[],"start":1,"end":2}',
+    ]) expect(parseGateKey(bad)).toBeNull();
   });
 
   it('asks for a sentence naming exactly what is being given up', () => {
-    expect(gatePhrase({ kind: 'disable', category: 'gambling' })).toBe('I choose to turn off the filter for gambling and betting.');
     expect(gatePhrase({ kind: 'allow', host: 'a.com' })).toBe('I choose to allow a.com.');
+    const limits = [{ id: 'reddit', label: 'Reddit', domains: ['reddit.com'], slot: 0, schedule: null }];
+    expect(gatePhrase({ kind: 'limit-remove', id: 'reddit' }, limits)).toBe('I choose to remove my limit on Reddit.');
+    expect(gatePhrase({ kind: 'limit-change', id: 'reddit', schedule: { days: [1], start: 60, end: 120 } }, limits)).toBe('I choose to loosen my limit on Reddit.');
   });
 });
 
@@ -78,14 +86,13 @@ describe('desiredRules', () => {
     expect(r.removeRuleIds).toContain(12);
   });
 
-  it('removes everything for a disabled category, even a refreshed one', () => {
+  it('has a rule in force for every category in every state', () => {
     const state = defaultState();
-    state.enabled.gambling = false;
     state.applied.gambling = 'v2';
     const r = desiredRules(state);
-    expect(r.enableRulesetIds).not.toContain('gambling');
-    expect(r.disableRulesetIds).toContain('gambling');
-    expect(r.removeRuleIds).toContain(12);
+    for (const c of ['adult', 'gambling', 'gore']) expect(r.enableRulesetIds.includes(c) !== r.disableRulesetIds.includes(c)).toBe(true);
+    expect(r.enableRulesetIds).toEqual(['adult', 'gore']);
+    expect(r.removeRuleIds).not.toContain(12);
   });
 
   it('lets allowlisted sites outrank block rules', () => {

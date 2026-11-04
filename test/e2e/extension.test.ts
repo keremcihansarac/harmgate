@@ -8,6 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type BrowserContext, type Worker } from 'playwright';
+import { CATEGORY_SENTENCES } from '../../src/lib/blockpage';
+import { ENCOURAGEMENTS } from '../../src/lib/limits';
 
 const DIST = join(__dirname, '..', '..', 'dist');
 const PROBES = { adult: 'harmgate-adult.test', gambling: 'harmgate-gambling.test', gore: 'harmgate-gore.test' } as const;
@@ -52,7 +54,7 @@ async function launch(extDir: string, profile: string): Promise<Session> {
   const context = await chromium.launchPersistentContext(profile, {
     channel: 'chromium',
     headless: true,
-    args: [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`, '--host-resolver-rules=MAP *.test ~NOTFOUND'],
+    args: [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`, '--host-resolver-rules=MAP harmgate-open.test 127.0.0.1,MAP *.test ~NOTFOUND'],
   });
   // The worker can register before a listener attaches, so poll rather than wait for the event.
   const deadline = Date.now() + 30000;
@@ -109,12 +111,13 @@ async function passGate(s: Session, key: string, phrase: string) {
   expect(reply).toMatchObject({ ok: true });
 }
 
-const DISABLE_ADULT = 'I choose to turn off the filter for adult content.';
 
 interface LastCheck { at: number; ok: boolean; error?: string }
 
 /** Fires the real daily alarm and waits for the check it starts to finish. */
 async function refreshNow(s: Session): Promise<LastCheck> {
+  // Install sets up the daily alarm under this same name. If that lands after ours, it replaces ours.
+  await expect.poll(() => s.worker.evaluate(async () => Boolean(await chrome.alarms.get('lists-check'))), { timeout: 10000 }).toBe(true);
   const before = Date.now();
   await s.worker.evaluate(() => chrome.alarms.create('lists-check', { when: Date.now() + 50 }));
   const deadline = Date.now() + 30000;
@@ -262,6 +265,9 @@ describe('Harmgate extension', () => {
     expect(await page.locator('#host').innerText()).toBe(PROBES.gambling);
     expect(await page.locator('#reason').innerText()).toContain('Gambling and betting');
     expect(await page.locator('#report').getAttribute('href')).toContain(`host=${PROBES.gambling}`);
+    expect(CATEGORY_SENTENCES.gambling).toContain(await page.locator('#sentence').innerText());
+    expect(await page.locator('#ideas li').count()).toBe(3);
+    expect(await page.locator('.block-mark').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
     // Nothing on this page may make giving in easy: no route to settings, no way to allow the site.
     expect(await page.getByRole('button').allInnerTexts()).toEqual(['Go back']);
     expect(await page.locator('a[href*="options.html"]').count()).toBe(0);
@@ -287,31 +293,46 @@ describe('Harmgate extension', () => {
     await page.close();
   });
 
-  it('requires the wait and the sentence to turn a category off, then keeps it off through restarts and updates', async () => {
+  it('offers no way to turn the core filter off', async () => {
     const s = await fresh();
-    const key = 'disable:adult';
-    await expectBlocked(s, PROBES.adult, true);
-    expect((await message(s, { type: 'gate-confirm', key, phrase: DISABLE_ADULT })).ok).toBe(false);
-    const started = await message(s, { type: 'gate-tick', key });
-    expect(started.value.readyAt - started.value.now).toBeGreaterThan(295_000);
-    const early = await message(s, { type: 'gate-confirm', key, phrase: DISABLE_ADULT });
-    expect(early).toMatchObject({ ok: false, error: 'The wait has not finished' });
-    await finishWait(s, key);
-    const wrong = await message(s, { type: 'gate-confirm', key, phrase: 'yes' });
-    expect(wrong).toMatchObject({ ok: false, error: 'The sentence does not match' });
-    await expectBlocked(s, PROBES.adult, true);
+    const page = await s.context.newPage();
+    await page.goto(`chrome-extension://${s.id}/options.html`);
+    await page.locator('#categories .card').first().waitFor();
+    expect(await page.locator('#categories button').count()).toBe(0);
+    await page.close();
 
-    expect((await message(s, { type: 'gate-confirm', key, phrase: DISABLE_ADULT })).ok).toBe(true);
+    for (const key of ['disable:adult', 'disable:gambling', 'disable:gore']) {
+      expect((await message(s, { type: 'gate-tick', key })).ok).toBe(false);
+      await finishWait(s, key);
+      const reply = await message(s, { type: 'gate-confirm', key, phrase: 'I choose to turn off the filter for adult content.' });
+      expect(reply).toMatchObject({ ok: false, error: 'Unknown action' });
+    }
+    expect((await message(s, { type: 'enable', category: 'adult' })).ok).toBe(false);
+    await expectBlocked(s, PROBES.adult, true);
+  });
+
+  it('turns back on a category that an older version had turned off, on restart and on update', async () => {
+    const s = await fresh();
+    /** What an older version left behind after someone passed its gate. */
+    const leaveOff = (session: Session) =>
+      session.worker.evaluate(async () => {
+        const { state } = (await chrome.storage.local.get('state')) as { state: Record<string, unknown> };
+        state.enabled = { adult: false, gambling: true, gore: true };
+        await chrome.storage.local.set({ state });
+        await chrome.declarativeNetRequest.updateEnabledRulesets({ disableRulesetIds: ['adult'] });
+      });
+
+    // The alarm is the last thing install sets up, so install cannot overwrite what comes next.
+    await expect.poll(() => s.worker.evaluate(async () => Boolean(await chrome.alarms.get('lists-check'))), { timeout: 10000 }).toBe(true);
+    await leaveOff(s);
     await expectBlocked(s, PROBES.adult, false);
-    await expectBlocked(s, PROBES.gambling, true);
-
     await s.context.close();
     const again = await launch(s.extDir, s.profile);
     sessions.push(again);
-    await expectBlocked(again, PROBES.adult, false);
-    await expectBlocked(again, PROBES.gambling, true);
+    await expect.poll(async () => enabledRulesets(again), { timeout: 10000 }).toContain('adult');
+    await expectBlocked(again, PROBES.adult, true);
 
-    // An update: enabled rulesets go back to manifest defaults, so the saved choice has to be re-applied.
+    await leaveOff(again);
     await again.context.close();
     const manifestPath = join(s.extDir, 'manifest.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
@@ -319,31 +340,30 @@ describe('Harmgate extension', () => {
     const updated = await launch(s.extDir, s.profile);
     sessions.push(updated);
     expect(await updated.worker.evaluate(() => chrome.runtime.getManifest().version)).toBe('9.9.9');
-    await expectBlocked(updated, PROBES.adult, false);
-    await expectBlocked(updated, PROBES.gambling, true);
-    expect(await enabledRulesets(updated)).not.toContain('adult');
-
-    expect((await message(updated, { type: 'enable', category: 'adult' })).ok).toBe(true);
+    await expect.poll(async () => enabledRulesets(updated), { timeout: 10000 }).toContain('adult');
     await expectBlocked(updated, PROBES.adult, true);
+    expect((await message(updated, { type: 'status' })).value.state.enabled).toBeUndefined();
   });
 
-  it('turns a category off through the settings page, with no pasting', async () => {
+  it('keeps a limit through the settings page gate, with no pasting', async () => {
     const s = await fresh();
-    const key = 'disable:gambling';
-    const phrase = 'I choose to turn off the filter for gambling and betting.';
+    const host = 'harmgate-gated.test';
+    const id = await limitSite(s, host);
+    const key = `limit-remove:${id}`;
+    const phrase = `I choose to remove my limit on ${host}.`;
     const page = await s.context.newPage();
     await page.goto(`chrome-extension://${s.id}/options.html`);
-    const card = page.locator('.card', { hasText: 'Gambling and betting' });
+    const card = page.locator(`[data-limit="${host}"]`);
 
-    await card.getByRole('button', { name: 'Turn off…' }).click();
+    await card.getByRole('button', { name: 'Remove limit…' }).click();
     await expect.poll(() => card.locator('.gate').innerText()).toContain('Time left: 5:00');
     expect(await card.getByRole('textbox').isVisible()).toBe(false);
     expect(await card.getByRole('button', { name: 'Confirm' }).isVisible()).toBe(false);
     expect(await card.locator('.phrase').isVisible()).toBe(false);
-    await card.getByRole('button', { name: 'Keep on' }).click();
-    await card.getByRole('button', { name: 'Turn off…' }).waitFor();
+    await card.getByRole('button', { name: 'Keep my limit' }).click();
+    await card.getByRole('button', { name: 'Remove limit…' }).waitFor();
 
-    await card.getByRole('button', { name: 'Turn off…' }).click();
+    await card.getByRole('button', { name: 'Remove limit…' }).click();
     await card.locator('.gate').waitFor();
     await finishWait(s, key);
     const input = card.getByRole('textbox');
@@ -359,23 +379,22 @@ describe('Harmgate extension', () => {
     expect(await confirm.isDisabled()).toBe(true);
     await input.pressSequentially('.');
     await confirm.click();
-    await card.getByRole('button', { name: 'Turn on' }).waitFor();
-    await expectBlocked(s, PROBES.gambling, false);
-    await card.getByRole('button', { name: 'Turn on' }).click();
-    await expectBlocked(s, PROBES.gambling, true);
+    await card.waitFor({ state: 'detached' });
+    await expectBlocked(s, host, false);
     await page.close();
   });
 
   it('starts the wait over when the tab stops reporting in', async () => {
     const s = await fresh();
-    const key = 'disable:adult';
+    const key = `allow:${PROBES.adult}`;
+    const phrase = `I choose to allow ${PROBES.adult}.`;
     const first = await message(s, { type: 'gate-tick', key });
     await s.worker.evaluate(async (k) => {
       const { state } = (await chrome.storage.local.get('state')) as { state: { pending: Record<string, unknown> } };
       state.pending[k] = { startedAt: Date.now() - 301_000, lastSeen: Date.now() - 25_000 };
       await chrome.storage.local.set({ state });
     }, key);
-    expect(await message(s, { type: 'gate-confirm', key, phrase: DISABLE_ADULT })).toMatchObject({ ok: false, error: 'The wait has not finished' });
+    expect(await message(s, { type: 'gate-confirm', key, phrase })).toMatchObject({ ok: false, error: 'The wait has not finished' });
     const restarted = await message(s, { type: 'gate-tick', key });
     expect(restarted.value.readyAt).toBeGreaterThan(first.value.readyAt);
     expect(restarted.value.readyAt - restarted.value.now).toBeGreaterThan(295_000);
@@ -444,14 +463,7 @@ describe('Harmgate extension', () => {
     await passGate(again, 'allow:harmgate-new.test', 'I choose to allow harmgate-new.test.');
     await expectBlocked(again, 'harmgate-new.test', false);
     await message(again, { type: 'remove-allow', host: 'harmgate-new.test' });
-
-    // Off removes the refreshed rule. On falls back to the bundled list at once.
-    served = {};
-    await passGate(again, 'disable:adult', DISABLE_ADULT);
-    await expectBlocked(again, 'harmgate-new.test', false);
-    expect((await message(again, { type: 'enable', category: 'adult' })).ok).toBe(true);
-    await expectBlocked(again, PROBES.adult, true);
-    expect(await enabledRulesets(again)).toContain('adult');
+    await expectBlocked(again, 'harmgate-new.test', true);
   });
 
   it.each([
@@ -469,6 +481,332 @@ describe('Harmgate extension', () => {
     await expectBlocked(s, PROBES.adult, true);
     await expectBlocked(s, 'harmgate-new.test', false);
     expect(await enabledRulesets(s)).toEqual(expect.arrayContaining(['adult', 'gambling', 'gore']));
+  });
+
+  const LIMITED = 'harmgate-limited.test';
+
+  /** Adds a limit for a synthetic site and returns its id. */
+  async function limitSite(s: Session, host: string, schedule: unknown = null): Promise<string> {
+    expect(await message(s, { type: 'limit-add-site', host, schedule })).toMatchObject({ ok: true });
+    const status = await message(s, { type: 'status' });
+    return status.value.state.limits.find((l: { domains: string[] }) => l.domains.includes(host)).id;
+  }
+
+  /** Fires the limits clock. */
+  const tick = (s: Session) => s.worker.evaluate(() => chrome.alarms.create('limits-tick', { when: Date.now() + 50 }));
+
+  /** A schedule that includes or excludes the current minute, whatever time the tests run. */
+  const scheduleAround = (active: boolean) => {
+    const now = new Date();
+    const minute = now.getHours() * 60 + now.getMinutes();
+    const today = now.getDay();
+    return active
+      ? { days: [0, 1, 2, 3, 4, 5, 6], start: (minute + 1438) % 1440, end: (minute + 3) % 1440 }
+      : { days: [(today + 3) % 7], start: 60, end: 120 };
+  };
+
+  const removeLimit = (s: Session, id: string, label: string) => passGate(s, `limit-remove:${id}`, `I choose to remove my limit on ${label}.`);
+  const loosenLimit = (s: Session, id: string, label: string, schedule: unknown) =>
+    passGate(s, `limit-change:${id}:${JSON.stringify(schedule)}`, `I choose to loosen my limit on ${label}.`);
+
+  const setStoredSchedule = (s: Session, id: string, schedule: unknown) =>
+    s.worker.evaluate(async ({ limitId, value }) => {
+      const { state } = (await chrome.storage.local.get('state')) as { state: { limits: { id: string; schedule: unknown }[] } };
+      state.limits.find((l) => l.id === limitId)!.schedule = value;
+      await chrome.storage.local.set({ state });
+    }, { limitId: id, value: schedule });
+
+  it('closes a limited site outright: no way through from the block page', async () => {
+    const s = await fresh();
+    const id = await limitSite(s, LIMITED);
+    const page = await s.context.newPage();
+    await page.goto(`http://sub.${LIMITED}/path?x=1&y=2#frag`).catch(() => undefined);
+    await page.locator('h1').waitFor();
+    const url = new URL(page.url());
+    expect(url.pathname).toBe('/block.html');
+    expect(url.searchParams.get('limit')).toBe(id);
+    expect(url.searchParams.get('host')).toBe(`sub.${LIMITED}`);
+    expect(await page.locator('h1').innerText()).toBe('You closed this site');
+    expect(await page.locator('#reason').innerText()).toBe('It stays closed while your limit applies.');
+    expect(ENCOURAGEMENTS).toContain(await page.locator('#sentence').innerText());
+    expect(await page.locator('#ideas li').count()).toBe(3);
+    expect(await page.locator('#host').innerText()).toBe(`sub.${LIMITED}`);
+    expect(await page.getByRole('button').allInnerTexts()).toEqual(['Close this tab']);
+    expect(await page.getByRole('link').count()).toBe(0);
+    await page.close();
+    expect(await visit(s, `http://${UNLISTED}/`)).not.toContain('/block.html');
+    await expectBlocked(s, PROBES.adult, true);
+    expect((await message(s, { type: 'limit-pass', id })).ok).toBe(false);
+  });
+
+  it('says when a scheduled limit opens again, and offers no way through in the meantime', async () => {
+    const s = await fresh();
+    await limitSite(s, LIMITED, scheduleAround(true));
+    const page = await s.context.newPage();
+    await page.goto(`http://${LIMITED}/`).catch(() => undefined);
+    await expect.poll(() => page.locator('#reason').innerText()).toMatch(/^It opens again (today|tomorrow) at \d\d:\d\d\.$/);
+    expect(await page.getByRole('button').allInnerTexts()).toEqual(['Close this tab']);
+    expect(await page.getByRole('link').count()).toBe(0);
+    await page.close();
+  });
+
+  it('closes the tab from the block page of a limited site', async () => {
+    const s = await fresh();
+    await limitSite(s, LIMITED);
+    const page = await s.context.newPage();
+    await page.goto(`http://${LIMITED}/`).catch(() => undefined);
+    await page.getByRole('button', { name: 'Close this tab' }).click();
+    await expect.poll(() => page.isClosed()).toBe(true);
+  });
+
+  it('reaches a tab already open on the site, when a limit is added and when a schedule starts', async () => {
+    const s = await fresh();
+    const host = 'harmgate-open.test';
+    const address = `http://${host}:${new URL(base).port}/feed`;
+    const page = await s.context.newPage();
+    await page.goto(address);
+    expect(page.url()).toBe(address);
+
+    const id = await limitSite(s, host);
+    await page.waitForURL(/block\.html\?limit=/, { timeout: 10000 });
+
+    await loosenLimit(s, id, host, scheduleAround(false));
+    await page.goto(address);
+    expect(page.url()).toBe(address);
+
+    await setStoredSchedule(s, id, scheduleAround(true));
+    await tick(s);
+    await page.waitForURL(/block\.html\?limit=/, { timeout: 10000 });
+    await page.close();
+  });
+
+  it('follows the schedule, in both directions', async () => {
+    const s = await fresh();
+    const id = await limitSite(s, LIMITED, scheduleAround(false));
+    await expectBlocked(s, LIMITED, false);
+    expect(await message(s, { type: 'limit-schedule', id, schedule: null })).toMatchObject({ ok: true });
+    await expectBlocked(s, LIMITED, true);
+    await loosenLimit(s, id, LIMITED, scheduleAround(true));
+    await expectBlocked(s, LIMITED, true);
+    expect(await message(s, { type: 'limit-schedule', id, schedule: { days: [], start: 1, end: 2 } })).toMatchObject({ ok: false });
+    expect(await message(s, { type: 'limit-schedule', id: 'nope', schedule: null })).toMatchObject({ ok: false });
+    expect(await message(s, { type: 'limit-add-site', host: 'harmgate-bad.test', schedule: { days: [], start: 1, end: 2 } })).toMatchObject({ ok: false });
+  });
+
+  it('will not remove or loosen a limit without the wait and the sentence', async () => {
+    const s = await fresh();
+    const week = { days: [0, 1, 2, 3, 4, 5, 6], start: 0, end: 1439 };
+    const id = await limitSite(s, LIMITED);
+    const removeKey = `limit-remove:${id}`;
+    const removePhrase = `I choose to remove my limit on ${LIMITED}.`;
+
+    // The old direct route is gone, and a schedule cannot stand in for removing the limit.
+    expect((await message(s, { type: 'limit-remove', id })).ok).toBe(false);
+    expect(await message(s, { type: 'limit-schedule', id, schedule: week })).toMatchObject({ ok: false, error: 'Loosening a limit takes the wait' });
+    await expectBlocked(s, LIMITED, true);
+
+    // Each step of the gate holds on its own.
+    expect((await message(s, { type: 'gate-confirm', key: removeKey, phrase: removePhrase })).ok).toBe(false);
+    await message(s, { type: 'gate-tick', key: removeKey });
+    expect(await message(s, { type: 'gate-confirm', key: removeKey, phrase: removePhrase })).toMatchObject({ ok: false, error: 'The wait has not finished' });
+    await finishWait(s, removeKey);
+    expect(await message(s, { type: 'gate-confirm', key: removeKey, phrase: 'yes' })).toMatchObject({ ok: false, error: 'The sentence does not match' });
+    await expectBlocked(s, LIMITED, true);
+    expect(await message(s, { type: 'gate-confirm', key: removeKey, phrase: removePhrase })).toMatchObject({ ok: true });
+    await expectBlocked(s, LIMITED, false);
+
+    // A finished wait for one schedule does not pay for another.
+    const id2 = await limitSite(s, LIMITED);
+    const paidFor = scheduleAround(true);
+    const key = `limit-change:${id2}:${JSON.stringify(paidFor)}`;
+    await message(s, { type: 'gate-tick', key });
+    await finishWait(s, key);
+    const other = `limit-change:${id2}:${JSON.stringify(scheduleAround(false))}`;
+    expect((await message(s, { type: 'gate-confirm', key: other, phrase: `I choose to loosen my limit on ${LIMITED}.` })).ok).toBe(false);
+    await expectBlocked(s, LIMITED, true);
+
+    // Making a limit stricter never waits.
+    const narrow = { days: [1], start: 600, end: 660 };
+    const id3 = await limitSite(s, 'harmgate-strict.test', narrow);
+    expect(await message(s, { type: 'limit-schedule', id: id3, schedule: { days: [1, 2], start: 540, end: 720 } })).toMatchObject({ ok: true });
+    expect(await message(s, { type: 'limit-schedule', id: id3, schedule: null })).toMatchObject({ ok: true });
+  });
+
+  it('starts and ends a schedule on the clock, with nobody touching the settings', async () => {
+    const s = await fresh();
+    const id = await limitSite(s, LIMITED, scheduleAround(false));
+    await expectBlocked(s, LIMITED, false);
+    await setStoredSchedule(s, id, scheduleAround(true));
+    await tick(s);
+    await expectBlocked(s, LIMITED, true);
+    await setStoredSchedule(s, id, scheduleAround(false));
+    await tick(s);
+    await expectBlocked(s, LIMITED, false);
+    const alarms = await s.worker.evaluate(async () => (await chrome.alarms.getAll()).map((a) => a.name));
+    expect(alarms).toContain('limits-tick');
+  });
+
+  it('keeps limits through a restart, and removing one takes effect once the gate is passed', async () => {
+    const s = await fresh();
+    const id = await limitSite(s, LIMITED);
+    await s.context.close();
+    const again = await launch(s.extDir, s.profile);
+    sessions.push(again);
+    await expectBlocked(again, LIMITED, true);
+    await removeLimit(again, id, LIMITED);
+    await expectBlocked(again, LIMITED, false);
+    const alarms = await again.worker.evaluate(async () => (await chrome.alarms.getAll()).map((a) => a.name));
+    expect(alarms).not.toContain('limits-tick');
+  });
+
+  it('replaces rules left by an older version when the extension updates', async () => {
+    const s = await fresh();
+    const id = await limitSite(s, LIMITED);
+    await s.worker.evaluate(async (limitId) => {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: [1000],
+        addRules: [{
+          id: 1000,
+          priority: 150,
+          action: { type: 'redirect' as chrome.declarativeNetRequest.RuleActionType, redirect: { extensionPath: `/pause.html?limit=${limitId}` } },
+          condition: { requestDomains: ['harmgate-limited.test'], resourceTypes: ['main_frame' as chrome.declarativeNetRequest.ResourceType] },
+        }],
+      });
+    }, id);
+    await s.context.close();
+    const manifestPath = join(s.extDir, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    await writeFile(manifestPath, JSON.stringify({ ...manifest, version: '9.9.9' }));
+    const updated = await launch(s.extDir, s.profile);
+    sessions.push(updated);
+    await expect.poll(() => visit(updated, `http://${LIMITED}/`), { timeout: 10000 }).toContain('/block.html?limit=');
+  });
+
+  it('applies limits to allowed sites, and removing a limit never opens the core filter', async () => {
+    const s = await fresh();
+    await passGate(s, `allow:${LIMITED}`, `I choose to allow ${LIMITED}.`);
+    await limitSite(s, LIMITED);
+    await expectBlocked(s, LIMITED, true);
+
+    const id = await limitSite(s, PROBES.gambling);
+    await expectBlocked(s, PROBES.gambling, true);
+    await removeLimit(s, id, PROBES.gambling);
+    await expectBlocked(s, PROBES.gambling, true);
+  });
+
+  it('covers every domain of a preset, and does not limit anything until asked', async () => {
+    const s = await fresh();
+    const match = (url: string) =>
+      s.worker.evaluate(async (u) => {
+        const r = await chrome.declarativeNetRequest.testMatchOutcome({ url: u, type: 'main_frame' as chrome.declarativeNetRequest.ResourceType });
+        return r.matchedRules.length;
+      }, url);
+    expect(await match('https://x.com/home')).toBe(0);
+    expect(await message(s, { type: 'limit-add-preset', id: 'x' })).toMatchObject({ ok: true });
+    expect(await match('https://x.com/home')).toBe(1);
+    expect(await match('https://twitter.com/home')).toBe(1);
+    expect(await match('https://www.reddit.com/')).toBe(0);
+    expect(await message(s, { type: 'limit-add-preset', id: 'nope' })).toMatchObject({ ok: false });
+  });
+
+  it('sets up limits through the settings page', async () => {
+    const s = await fresh();
+    const page = await s.context.newPage();
+    await page.goto(`chrome-extension://${s.id}/options.html`);
+    const reddit = page.locator('[data-limit="Reddit"]');
+
+    // The schedule is picked before the limit exists, so setting one up never hits the wait.
+    await reddit.getByRole('combobox').selectOption('schedule');
+    expect(await reddit.getByLabel('Mon').isChecked()).toBe(true);
+    expect(await reddit.getByLabel('Sat').isChecked()).toBe(false);
+    expect(await reddit.getByLabel('From').inputValue()).toBe('09:00');
+    expect((await message(s, { type: 'status' })).value.state.limits).toHaveLength(0);
+    await reddit.getByLabel('Sat').check();
+    await reddit.getByLabel('From').fill('10:30');
+    // A re-render caused by another card keeps what was being set up.
+    await page.locator('[data-limit="X"]').getByRole('button', { name: 'Add limit' }).click();
+    await page.locator('[data-limit="X"]').getByRole('button', { name: 'Remove limit…' }).waitFor();
+    expect(await reddit.getByLabel('From').inputValue()).toBe('10:30');
+    await reddit.getByRole('button', { name: 'Add limit' }).click();
+    await reddit.getByRole('button', { name: 'Remove limit…' }).waitFor();
+    const redditSchedule = async () => (await message(s, { type: 'status' })).value.state.limits.find((l: { id: string }) => l.id === 'reddit').schedule;
+    expect(await redditSchedule()).toEqual({ days: [1, 2, 3, 4, 5, 6], start: 630, end: 1020 });
+
+    // Stricter saves at once.
+    const save = reddit.getByRole('button', { name: 'Save changes' });
+    expect(await save.isVisible()).toBe(false);
+    await reddit.getByLabel('Sun').check();
+    await save.click();
+    await expect.poll(redditSchedule).toEqual({ days: [1, 2, 3, 4, 5, 6, 0], start: 630, end: 1020 });
+    expect(await reddit.locator('.gate').count()).toBe(0);
+
+    // Looser waits, and backing out restores what was saved.
+    await reddit.getByLabel('Sat').uncheck();
+    await reddit.getByRole('button', { name: 'Save changes' }).click();
+    await reddit.locator('.gate').waitFor();
+    expect(await reddit.locator('.encouragement').innerText()).not.toBe('');
+    expect(await reddit.innerText()).toContain('New schedule: Mon, Tue, Wed, Thu, Fri, Sun, 10:30 to 17:00');
+    expect(await reddit.getByRole('button', { name: 'Remove limit…' }).count()).toBe(0);
+    await reddit.getByRole('button', { name: 'Keep my limit' }).click();
+    await reddit.getByRole('button', { name: 'Remove limit…' }).waitFor();
+    expect(await reddit.getByLabel('Sat').isChecked()).toBe(true);
+    expect(await redditSchedule()).toEqual({ days: [1, 2, 3, 4, 5, 6, 0], start: 630, end: 1020 });
+
+    // Going through with it.
+    await reddit.getByLabel('Sat').uncheck();
+    await reddit.getByRole('button', { name: 'Save changes' }).click();
+    await reddit.locator('.gate').waitFor();
+    const changed = { days: [1, 2, 3, 4, 5, 0], start: 630, end: 1020 };
+    await finishWait(s, `limit-change:reddit:${JSON.stringify(changed)}`);
+    await reddit.getByRole('textbox').waitFor({ timeout: 10000 });
+    await reddit.getByRole('textbox').pressSequentially('I choose to loosen my limit on Reddit.');
+    await reddit.getByRole('button', { name: 'Confirm' }).click();
+    await reddit.getByRole('button', { name: 'Remove limit…' }).waitFor();
+    expect(await redditSchedule()).toEqual(changed);
+
+    // A schedule that cannot work is refused before anything is saved.
+    await reddit.getByLabel('Until').fill('10:30');
+    await reddit.locator('.warn').waitFor();
+    await reddit.getByRole('button', { name: 'Save changes' }).click();
+    expect(await redditSchedule()).toEqual(changed);
+    expect(await reddit.locator('.gate').count()).toBe(0);
+
+    // Other buttons on this page must not leave extra listeners on the form: one click, one limit.
+    const x = page.locator('[data-limit="X"]');
+    await x.getByRole('button', { name: 'Remove limit…' }).click();
+    await x.getByRole('button', { name: 'Keep my limit' }).click();
+    await page.locator('#allow-host').fill('harmgate-other.test');
+    await page.locator('#allow-form').getByRole('button', { name: 'Allow a site…' }).click();
+    await page.locator('#allow-form').getByRole('button', { name: 'Cancel' }).click();
+
+    await page.locator('#limit-host').fill('nonsense');
+    await page.locator('#limit-form').getByRole('button', { name: 'Add limit' }).click();
+    await page.locator('#limit-error').waitFor();
+    await page.locator('#limit-host').fill(`https://${LIMITED}/page`);
+    await page.locator('#limit-form').getByRole('button', { name: 'Add limit' }).click();
+    await page.locator(`[data-limit="${LIMITED}"]`).waitFor();
+    expect(await page.locator('#limit-error').isVisible()).toBe(false);
+    await sleep(300);
+    expect(await page.locator('#limit-error').isVisible()).toBe(false);
+    expect((await message(s, { type: 'status' })).value.state.limits.filter((l: { domains: string[] }) => l.domains.includes(LIMITED))).toHaveLength(1);
+    await page.locator('#limit-host').fill(LIMITED);
+    await page.locator('#limit-form').getByRole('button', { name: 'Add limit' }).click();
+    await page.getByText('That site already has a limit').waitFor();
+    await expectBlocked(s, LIMITED, true);
+
+    // Removing goes through the gate too, with sentences to read during the wait.
+    const card = page.locator(`[data-limit="${LIMITED}"]`);
+    await card.getByRole('button', { name: 'Remove limit…' }).click();
+    await card.locator('.gate').waitFor();
+    expect(await card.locator('.encouragement').innerText()).not.toBe('');
+    const id = (await message(s, { type: 'status' })).value.state.limits.find((l: { domains: string[] }) => l.domains.includes(LIMITED)).id;
+    await finishWait(s, `limit-remove:${id}`);
+    await card.getByRole('textbox').waitFor({ timeout: 10000 });
+    await card.getByRole('textbox').pressSequentially(`I choose to remove my limit on ${LIMITED}.`);
+    await card.getByRole('button', { name: 'Confirm' }).click();
+    await card.waitFor({ state: 'detached' });
+    await expectBlocked(s, LIMITED, false);
+    await page.close();
   });
 
   it('ignores a published list that is not newer than the bundled one', async () => {

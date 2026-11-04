@@ -44,6 +44,23 @@ input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .gate { width: 100%; border-top: 1px solid var(--line); padding-top: 12px; }
 .gate-host { margin: 12px 0 8px; font-weight: 600; }
 .gate p { margin-bottom: 8px; }
+.encouragement { font-style: italic; }
 .phrase { user-select: none; -webkit-user-select: none; font-weight: 600; }
 code { font-size: 0.9375rem; overflow-wrap: anywhere; }
+select { font: inherit; font-size: 0.9375rem; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+input[type="time"] { width: auto; }
+.limit-body { width: 100%; border-top: 1px solid var(--line); margin-top: 4px; padding-top: 12px; display: grid; gap: 12px; }
+.field { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.limit-head { width: 100%; }
+.limit-times { margin-top: 8px; }
+.days { display: flex; flex-wrap: wrap; gap: 8px; }
+.day { display: inline-flex; align-items: center; gap: 4px; font-size: 0.875rem; }
+.day input { width: auto; }
 ul.plain { list-style: none; margin: 0; padding: 0; }
+main.block { max-width: 34rem; padding-top: 64px; text-align: center; }
+.block-mark { display: block; margin: 0 auto 20px; }
+.block-sentence { font-size: 1.25rem; line-height: 1.4; font-weight: 500; text-wrap: balance; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin: 24px 0; }
+.block-ideas-title { margin-bottom: 4px; }
+.block-ideas li { padding: 2px 0; }
+.block-actions { justify-content: center; margin-top: 24px; }
+.block-wrong { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 8px; }

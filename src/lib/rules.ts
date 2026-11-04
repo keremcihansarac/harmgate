@@ -31,8 +31,8 @@ export function desiredRules(state: State) {
   const disableRulesetIds: string[] = [];
   const removeRuleIds: number[] = [ALLOW_RULE_ID];
   for (const c of CATEGORIES) {
-    const refreshed = state.enabled[c] && state.applied[c] !== undefined;
-    (state.enabled[c] && !refreshed ? enableRulesetIds : disableRulesetIds).push(c);
+    const refreshed = state.applied[c] !== undefined;
+    (refreshed ? disableRulesetIds : enableRulesetIds).push(c);
     if (!refreshed) removeRuleIds.push(DYNAMIC_RULE_IDS[c]);
   }
   const addRules = state.allowlist.length ? [allowRule(state.allowlist)] : [];

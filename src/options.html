@@ -15,7 +15,20 @@
 
       <h2>Core filter</h2>
       <div id="categories"></div>
-      <p class="small muted">Turning a category off takes a 5-minute wait with this tab open and in front, then typing a sentence by hand. Turning it on is instant.</p>
+      <p class="small muted">Always on. These categories cannot be turned off.</p>
+
+      <h2>Your limits</h2>
+      <p class="small muted">Sites you choose to close, all the time or on a schedule. While a limit applies, the site stays closed. Adding a limit or making it stricter is instant. Removing or loosening one takes the same 5-minute wait, then typing a sentence by hand, so pick the schedule you want before you add it.</p>
+      <div id="limits"></div>
+      <form id="limit-form" class="card">
+        <label for="limit-host" class="small muted">Limit another site</label>
+        <div class="actions" style="margin-top: 8px">
+          <input id="limit-host" type="text" placeholder="example.com" autocomplete="off" spellcheck="false" />
+          <button type="submit">Add limit</button>
+        </div>
+        <p id="limit-error" class="small warn" style="margin: 8px 0 0" hidden></p>
+        <div id="limit-when" style="margin-top: 12px"></div>
+      </form>
 
       <h2>Allowed sites</h2>
       <ul id="allowlist" class="plain"></ul>

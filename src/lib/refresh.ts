@@ -41,7 +41,7 @@ export async function refreshLists(state: State, base = LISTS_BASE_URL): Promise
   for (const c of CATEGORIES) {
     const current = state.applied[c] ?? bundled.version;
     const entry = meta.categories[c];
-    if (!state.enabled[c] || !entry || meta.version <= current) continue;
+    if (!entry || meta.version <= current) continue;
     const listRes = await fetch(`${base}/${c}.json`, { cache: 'no-store' });
     if (!listRes.ok) throw new Error(`${c} list: HTTP ${listRes.status}`);
     const text = await listRes.text();

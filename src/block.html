@@ -8,17 +8,21 @@
     <link rel="stylesheet" href="./lib/shared.css" />
   </head>
   <body>
-    <main id="content" hidden>
-      <h1>This page is blocked</h1>
-      <p id="reason" class="muted">Harmgate blocked this site.</p>
+    <main id="content" class="block" hidden>
+      <img class="block-mark" src="/icons/icon-128.png" alt="" width="64" height="64" />
+      <h1 id="title">This page is blocked</h1>
       <p><code id="host"></code></p>
-      <div class="actions">
+      <p id="reason" class="muted">Harmgate blocked this site.</p>
+      <p id="sentence" class="block-sentence"></p>
+      <p class="small muted block-ideas-title">Instead, you could:</p>
+      <ul id="ideas" class="plain small block-ideas"></ul>
+      <div class="actions block-actions">
         <button id="back" class="primary" type="button">Go back</button>
       </div>
-      <section id="wrong" hidden>
+      <section id="wrong" class="block-wrong" hidden>
         <h2>Blocked by mistake?</h2>
         <p class="small muted">Report it so the list gets fixed for everyone.</p>
-        <div class="actions">
+        <div class="actions block-actions">
           <a id="report" class="button" target="_blank" rel="noopener noreferrer">Report on GitHub</a>
         </div>
         <p class="small muted" style="margin-top: 12px">A report is a public GitHub issue, and it shows this site's name next to your GitHub account. Nothing is sent unless you submit it.</p>

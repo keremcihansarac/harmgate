@@ -1,12 +1,15 @@
 import type { Category } from './constants';
+import type { Schedule } from './limits';
 
 export type Message =
   | { type: 'status' }
   | { type: 'gate-tick'; key: string }
   | { type: 'gate-cancel'; key: string }
   | { type: 'gate-confirm'; key: string; phrase: string }
-  | { type: 'enable'; category: Category }
-  | { type: 'remove-allow'; host: string };
+  | { type: 'remove-allow'; host: string }
+  | { type: 'limit-add-preset'; id: string; schedule?: Schedule | null }
+  | { type: 'limit-add-site'; host: string; schedule?: Schedule | null }
+  | { type: 'limit-schedule'; id: string; schedule: Schedule | null };
 
 export interface Status {
   state: import('./state').State;
