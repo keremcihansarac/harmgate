@@ -16,7 +16,7 @@ A free, open-source Chrome extension that blocks pornography, gambling and gore 
 
 ## Install
 
-Harmgate is not in the Chrome Web Store. [Install it from GitHub](docs/INSTALL.md) in about two minutes, using Chrome's developer mode.
+Harmgate is not in the Chrome Web Store. [Install it from GitHub](docs/INSTALL.md) in about two minutes, using Chrome's developer mode. **Leave developer mode on:** Chrome turns Harmgate off without it.
 
 ## What it cannot do
 
