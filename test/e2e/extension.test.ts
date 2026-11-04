@@ -50,27 +50,52 @@ async function prepareExtension(): Promise<string> {
 
 interface Session { context: BrowserContext; worker: Worker; id: string; extDir: string; profile: string }
 
+/**
+ * Several browser calls have no timeout of their own. Without this, a hang only shows up as the
+ * whole test running out of time, with nothing to say which call never came back.
+ */
+async function step<T>(label: string, work: Promise<T>, ms = 45000): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const limit = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} did not finish within ${ms / 1000}s`)), ms);
+  });
+  try {
+    return await Promise.race([work, limit]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const closeSession = (s: Session) => step('Closing the browser', s.context.close());
+
 async function launch(extDir: string, profile: string): Promise<Session> {
-  const context = await chromium.launchPersistentContext(profile, {
+  const context = await step('Launching the browser', chromium.launchPersistentContext(profile, {
     channel: 'chromium',
     headless: true,
     args: [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`, '--host-resolver-rules=MAP harmgate-open.test 127.0.0.1,MAP *.test ~NOTFOUND'],
-  });
+  }));
   // The worker can register before a listener attaches, so poll rather than wait for the event.
   const deadline = Date.now() + 30000;
   while (!context.serviceWorkers()[0] && Date.now() < deadline) await sleep(50);
-  const worker = context.serviceWorkers()[0];
-  if (!worker) throw new Error('Service worker did not start');
-  return { context, worker, id: new URL(worker.url()).host, extDir, profile };
+  const started = context.serviceWorkers()[0];
+  if (!started) throw new Error('Service worker did not start');
+  const worker = new Proxy(started, {
+    get(target, name) {
+      if (name === 'evaluate') return (fn: never, arg: never) => step('Running code in the service worker', target.evaluate(fn, arg));
+      const value = Reflect.get(target, name) as unknown;
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  return { context, worker, id: new URL(started.url()).host, extDir, profile };
 }
 
 async function visit(s: Session, url: string) {
-  const page = await s.context.newPage();
+  const page = await step('Opening a page', s.context.newPage());
   try {
     await page.goto(url, { waitUntil: 'load', timeout: 15000 }).catch(() => undefined);
     return page.url();
   } finally {
-    await page.close();
+    await step('Closing a page', page.close());
   }
 }
 
@@ -87,10 +112,10 @@ async function expectBlocked(s: Session, host: string, want: boolean) {
 }
 
 async function message(s: Session, msg: unknown): Promise<{ ok: boolean; error?: string; value?: any }> {
-  const page = await s.context.newPage();
+  const page = await step('Opening a page', s.context.newPage());
   await page.goto(`chrome-extension://${s.id}/options.html`);
-  const reply = await page.evaluate((m) => chrome.runtime.sendMessage(m), msg);
-  await page.close();
+  const reply = await step(`Reply to ${JSON.stringify(msg).slice(0, 60)}`, page.evaluate((m) => chrome.runtime.sendMessage(m), msg));
+  await step('Closing a page', page.close());
   return reply;
 }
 
@@ -220,7 +245,8 @@ describe('Harmgate extension', () => {
     while (!s.context.pages().some((p) => p.url().includes('options.html')) && Date.now() < deadline) await sleep(100);
     const page = s.context.pages().find((p) => p.url().includes('options.html'));
     expect(page).toBeDefined();
-    await page!.locator('.card').first().waitFor();
+    // Not just '.card': the forms further down are cards too, and exist before the page has rendered.
+    await page!.locator('#categories .card').first().waitFor();
     const text = await page!.locator('#categories').innerText();
     expect(text.match(/On ·/g)?.length).toBe(3);
     expect(text).not.toContain('Problem');
@@ -326,14 +352,14 @@ describe('Harmgate extension', () => {
     await expect.poll(() => s.worker.evaluate(async () => Boolean(await chrome.alarms.get('lists-check'))), { timeout: 10000 }).toBe(true);
     await leaveOff(s);
     await expectBlocked(s, PROBES.adult, false);
-    await s.context.close();
+    await closeSession(s);
     const again = await launch(s.extDir, s.profile);
     sessions.push(again);
     await expect.poll(async () => enabledRulesets(again), { timeout: 10000 }).toContain('adult');
     await expectBlocked(again, PROBES.adult, true);
 
     await leaveOff(again);
-    await again.context.close();
+    await closeSession(again);
     const manifestPath = join(s.extDir, 'manifest.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
     await writeFile(manifestPath, JSON.stringify({ ...manifest, version: '9.9.9' }));
@@ -452,7 +478,7 @@ describe('Harmgate extension', () => {
     await expectBlocked(s, PROBES.gambling, true);
     expect(await enabledRulesets(s)).not.toContain('adult');
 
-    await s.context.close();
+    await closeSession(s);
     const again = await launch(s.extDir, s.profile);
     sessions.push(again);
     await expectBlocked(again, 'harmgate-new.test', true);
@@ -649,7 +675,7 @@ describe('Harmgate extension', () => {
   it('keeps limits through a restart, and removing one takes effect once the gate is passed', async () => {
     const s = await fresh();
     const id = await limitSite(s, LIMITED);
-    await s.context.close();
+    await closeSession(s);
     const again = await launch(s.extDir, s.profile);
     sessions.push(again);
     await expectBlocked(again, LIMITED, true);
@@ -673,7 +699,7 @@ describe('Harmgate extension', () => {
         }],
       });
     }, id);
-    await s.context.close();
+    await closeSession(s);
     const manifestPath = join(s.extDir, 'manifest.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
     await writeFile(manifestPath, JSON.stringify({ ...manifest, version: '9.9.9' }));
