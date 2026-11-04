@@ -46,7 +46,7 @@ Done when someone can set up and manage their own limits.
 
 Done when a stranger can install it in a few minutes by following the guide.
 
-### Phase 4: Family mode for Chrome (in progress)
+### Phase 4: Family mode for Chrome (on hold until there is demand)
 
 What Chromium's source and policy definitions say:
 
@@ -55,13 +55,7 @@ What Chromium's source and policy definitions say:
 - `IncognitoModeAvailability` and `URLBlocklist` for `chrome://extensions` worked in a test on a home Mac with no device management: macOS 26.3 and Chrome 156, using a manually installed configuration profile. Incognito would not open and the extensions page was blocked. `BrowserGuestModeEnabled` and `BrowserAddPersonEnabled` were in the same profile but not checked. Chromium warns that blocking internal pages can be worked around.
 - With those policies on, Harmgate could still be removed from Chrome's toolbar menu.
 
-Next steps:
-
-- Write a setup guide for Mac that is honest about what stays open, together with a child account without admin rights, family DNS and SafeSearch.
-- Test whether a child account can undo the setup.
-- Test on Windows before claiming support there.
-
-Done when the guide has been followed on a real computer and says exactly what it does and does not close.
+If this is picked up, it needs a setup guide that is honest about what stays open, a test of whether a child account can undo the setup, and a Windows test before claiming support there.
 
 ### On hold
 
