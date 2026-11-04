@@ -1,6 +1,6 @@
 {
   "name": "harmgate",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-only",
@@ -9,6 +9,7 @@
     "lists:review": "node scripts/lists/review.mjs",
     "typecheck": "tsc",
     "build": "vite build",
+    "package": "node scripts/package.mjs",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "spike:lists": "node spike/scripts/fetch-lists.mjs",

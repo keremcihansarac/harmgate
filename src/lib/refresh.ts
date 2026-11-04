@@ -1,4 +1,4 @@
-import { CATEGORIES, DYNAMIC_RULE_IDS, LISTS_BASE_URL, MAX_LIST_DOMAINS, MIN_LIST_RATIO, isValidDomain, type Category } from './constants';
+import { CATEGORIES, DYNAMIC_RULE_IDS, LATEST_VERSION_URL, LISTS_BASE_URL, MAX_LIST_DOMAINS, MIN_LIST_RATIO, isValidDomain, type Category } from './constants';
 import { dynamicBlockRule } from './rules';
 import type { State } from './state';
 
@@ -50,5 +50,31 @@ export async function refreshLists(state: State, base = LISTS_BASE_URL): Promise
     await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: [id], addRules: [dynamicBlockRule(c, domains, chrome.runtime.id)] });
     await chrome.declarativeNetRequest.updateEnabledRulesets({ disableRulesetIds: [c] });
     state.applied[c] = meta.version;
+  }
+}
+
+const VERSION_RE = /^\d+\.\d+\.\d+$/;
+
+/** True when `candidate` is a well-formed version above `current`. */
+export function isNewerVersion(candidate: unknown, current: string): candidate is string {
+  if (typeof candidate !== 'string' || !VERSION_RE.test(candidate)) return false;
+  const a = candidate.split('.').map(Number);
+  const b = current.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i]! > b[i]!;
+  return false;
+}
+
+/**
+ * GitHub-only installs get no automatic updates, so people have to be told. This only ever
+ * reads a version number. A failure changes nothing, because it says nothing about the lists.
+ */
+export async function checkLatestVersion(state: State, url = LATEST_VERSION_URL): Promise<void> {
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return;
+    const { version } = (await res.json()) as { version?: unknown };
+    state.latestVersion = isNewerVersion(version, chrome.runtime.getManifest().version) ? version : null;
+  } catch {
+    // Offline, or no release yet. The next daily check tries again.
   }
 }

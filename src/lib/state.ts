@@ -13,6 +13,8 @@ export interface State {
   /** List version of the refreshed rule in use, per category. Absent means the bundled ruleset. */
   applied: Partial<Record<Category, string>>;
   lastCheck: { at: number; ok: boolean; error?: string } | null;
+  /** The newest published version of Harmgate, as of the last check. */
+  latestVersion: string | null;
   /** Personal limits. A site being here means the limit is on. */
   limits: Limit[];
 }
@@ -22,6 +24,7 @@ export const defaultState = (): State => ({
   pending: {},
   applied: {},
   lastCheck: null,
+  latestVersion: null,
   limits: [],
 });
 

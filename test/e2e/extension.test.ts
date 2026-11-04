@@ -41,7 +41,9 @@ async function prepareExtension(): Promise<string> {
   for (const f of files) {
     const js = await readFile(f, 'utf8');
     if (!js.includes('/releases/download/lists')) continue;
-    await writeFile(f, js.replace(/`\$\{[^}]+\}\/releases\/download\/lists`|"https:\/\/github\.com\/keremcihansarac\/harmgate\/releases\/download\/lists"/, JSON.stringify(`${base}/lists`)));
+    await writeFile(f, js
+      .replace(/`\$\{[^}]+\}\/releases\/download\/lists`|"https:\/\/github\.com\/keremcihansarac\/harmgate\/releases\/download\/lists"/, JSON.stringify(`${base}/lists`))
+      .replace(/`\$\{[^}]+\}\/releases\/latest\/download\/version\.json`|"https:\/\/github\.com\/keremcihansarac\/harmgate\/releases\/latest\/download\/version\.json"/, JSON.stringify(`${base}/lists/latest-version.json`)));
     patched++;
   }
   if (!patched) throw new Error('Could not find the list URL to patch');
@@ -142,7 +144,11 @@ interface LastCheck { at: number; ok: boolean; error?: string }
 /** Fires the real daily alarm and waits for the check it starts to finish. */
 async function refreshNow(s: Session): Promise<LastCheck> {
   // Install sets up the daily alarm under this same name. If that lands after ours, it replaces ours.
-  await expect.poll(() => s.worker.evaluate(async () => Boolean(await chrome.alarms.get('lists-check'))), { timeout: 10000 }).toBe(true);
+  // A check that already ran means install is over, and it used up the alarm this function set.
+  await expect.poll(() => s.worker.evaluate(async () => {
+    const { state } = (await chrome.storage.local.get('state')) as { state?: { lastCheck: LastCheck | null } };
+    return Boolean(state?.lastCheck) || Boolean(await chrome.alarms.get('lists-check'));
+  }), { timeout: 10000 }).toBe(true);
   const before = Date.now();
   await s.worker.evaluate(() => chrome.alarms.create('lists-check', { when: Date.now() + 50 }));
   const deadline = Date.now() + 30000;
@@ -832,6 +838,40 @@ describe('Harmgate extension', () => {
     await card.getByRole('button', { name: 'Confirm' }).click();
     await card.waitFor({ state: 'detached' });
     await expectBlocked(s, LIMITED, false);
+    await page.close();
+  });
+
+  it('tells people about a newer version, and only then', async () => {
+    const s = await fresh();
+    const page = await s.context.newPage();
+    await page.goto(`chrome-extension://${s.id}/options.html`);
+    await page.locator('#categories .card').first().waitFor();
+    const current = await s.worker.evaluate(() => chrome.runtime.getManifest().version);
+    expect(await page.locator('#version').innerText()).toBe(`Harmgate ${current}.`);
+    expect(await page.locator('#update').isVisible()).toBe(false);
+
+    served = {};
+    expect(await refreshNow(s)).toMatchObject({ ok: false });
+    await page.reload();
+    await page.locator('#categories .card').first().waitFor();
+    expect(await page.locator('#update').isVisible()).toBe(false);
+
+    served = { '/lists/latest-version.json': JSON.stringify({ version: '99.0.0' }) };
+    await refreshNow(s);
+    await page.reload();
+    await page.locator('#update').waitFor();
+    expect(await page.locator('#update').innerText()).toContain('Harmgate 99.0.0 is available');
+    expect(await page.locator('#update-link').getAttribute('href')).toContain('/releases/latest');
+
+    // Once people have caught up, or if the file makes no sense, the notice goes away.
+    for (const body of [JSON.stringify({ version: current }), JSON.stringify({ version: '<b>9</b>' }), 'not json']) {
+      served = { '/lists/latest-version.json': JSON.stringify({ version: '99.0.0' }) };
+      await refreshNow(s);
+      served = { '/lists/latest-version.json': body };
+      await refreshNow(s);
+      const latest = (await message(s, { type: 'status' })).value.state.latestVersion;
+      expect(latest).toBe(body === 'not json' ? '99.0.0' : null);
+    }
     await page.close();
   });
 

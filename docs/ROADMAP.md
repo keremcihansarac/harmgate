@@ -31,7 +31,7 @@ Confirmed that full blocklists fit in one rule and that the list can be updated 
 
 Done when the filter works right after install and refreshes its list by itself.
 
-### Phase 2: Personal limits (built)
+### Phase 2: Personal limits (done)
 
 - Presets for X, Reddit, Instagram and TikTok, plus custom sites.
 - All the time or on a schedule.
@@ -42,7 +42,7 @@ Done when someone can set up and manage their own limits.
 
 ### Phase 3: Release
 
-- README, install guide with GIF, privacy note, CI, GitHub Releases, new-version notice.
+- README, install guide, privacy note, CI, GitHub Releases, new-version notice.
 - Signed Firefox build. Firefox allows distribution outside its store with automatic updates; still to be tested from GitHub.
 
 Done when a stranger can install it in a few minutes by following the guide.

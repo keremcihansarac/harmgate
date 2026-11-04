@@ -15,6 +15,8 @@ export const HEARTBEAT_GAP_MS = 20_000;
 
 export const REPO_URL = 'https://github.com/keremcihansarac/harmgate';
 export const LISTS_BASE_URL = `${REPO_URL}/releases/download/lists`;
+export const RELEASES_URL = `${REPO_URL}/releases/latest`;
+export const LATEST_VERSION_URL = `${REPO_URL}/releases/latest/download/version.json`;
 
 export const ALLOW_RULE_ID = 1;
 export const DYNAMIC_RULE_IDS: Record<Category, number> = { adult: 11, gambling: 12, gore: 13 };

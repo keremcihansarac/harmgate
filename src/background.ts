@@ -1,7 +1,7 @@
 import { WAIT_MS, isValidDomain } from './lib/constants';
 import { MAX_LIMITS, PRESETS, isLoosening, isValidSchedule, lowestFreeSlot, syncLimits, type Limit, type Schedule } from './lib/limits';
 import type { GateTick, Message, Reply, Status } from './lib/messages';
-import { bundledInfo, refreshLists } from './lib/refresh';
+import { bundledInfo, checkLatestVersion, refreshLists } from './lib/refresh';
 import { activeCategories, syncRules } from './lib/rules';
 import { gatePhrase, loadState, parseGateKey, pendingStatus, saveState, touchPending, type State } from './lib/state';
 
@@ -26,6 +26,7 @@ const checkLists = () =>
     } catch (e) {
       state.lastCheck = { at: Date.now(), ok: false, error: String((e as Error).message) };
     }
+    await checkLatestVersion(state);
     await saveState(state);
   });
 

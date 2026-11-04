@@ -1,7 +1,9 @@
 node_modules/
 dist/
 lists-out/
+release/
 public/rules/
 spike/data/
 spike/.out/
 spike/demo/
+.DS_Store

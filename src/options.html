@@ -11,6 +11,7 @@
     <main>
       <h1>Harmgate</h1>
       <p class="muted">Blocks harmful sites by default. Everything runs in your browser and no browsing data leaves it.</p>
+      <p id="update" class="card small" hidden>Harmgate <span id="update-version"></span> is available. It does not install by itself: <a id="update-link" target="_blank" rel="noopener noreferrer">download it from GitHub</a> and replace the files in your Harmgate folder, as described on that page.</p>
       <p id="incognito" class="warn small" hidden>Harmgate is not running in incognito windows. To turn it on, open this extension's details in <code>chrome://extensions</code> and enable "Allow in Incognito".</p>
 
       <h2>Core filter</h2>
@@ -45,7 +46,8 @@
 
       <h2>Blocklists</h2>
       <p id="lists" class="small muted"></p>
-      <p class="small muted">Harmgate checks once a day for a newer list. That request goes to GitHub and contains nothing about your browsing.</p>
+      <p class="small muted">Harmgate checks once a day for a newer list and a newer version. Those requests go to GitHub and contain nothing about your browsing.</p>
+      <p id="version" class="small muted"></p>
     </main>
     <script type="module" src="./options.ts"></script>
   </body>

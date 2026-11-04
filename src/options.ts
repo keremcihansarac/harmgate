@@ -1,4 +1,4 @@
-import { CATEGORIES, CATEGORY_LABELS, HEARTBEAT_MS, isValidDomain, type Category } from './lib/constants';
+import { CATEGORIES, CATEGORY_LABELS, HEARTBEAT_MS, RELEASES_URL, isValidDomain, type Category } from './lib/constants';
 import {
   DEFAULT_SCHEDULE,
   ENCOURAGEMENT_MS,
@@ -306,6 +306,10 @@ function renderLists(status: Status) {
   const check = status.state.lastCheck;
   const checked = check ? ` Last check: ${new Date(check.at).toLocaleString()}${check.ok ? '.' : ' (failed).'}` : '';
   el('lists').textContent = `List version: ${newest.slice(0, 10)}.${checked}`;
+  el('version').textContent = `Harmgate ${chrome.runtime.getManifest().version}.`;
+  el('update').hidden = !status.state.latestVersion;
+  el('update-version').textContent = status.state.latestVersion ?? '';
+  el<HTMLAnchorElement>('update-link').href = RELEASES_URL;
 }
 
 async function render() {
