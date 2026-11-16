@@ -11,7 +11,7 @@ Harmgate is an open-source Manifest V3 browser extension. It blocks harmful site
 | Personal limits | All or nothing: while a limit applies, the site is closed, with no way through from the block page. All the time or on a schedule, off by default, set in settings. Adding a limit or making it stricter is instant. Removing or loosening one takes the same wait and typed sentence as the core filter, with encouraging sentences shown during the wait. |
 | License | GPL-3.0 |
 | Blocking method | One `declarativeNetRequest` rule per list using `requestDomains`, redirecting to our own page. Needs `<all_urls>`. |
-| Starting lists | StevenBlack gambling + porn, Hagezi NSFW, Hagezi gambling mini, Sinfonietta snuff: 237,910 domains after deduplication and allowlisting. |
+| Starting lists | StevenBlack gambling + porn, Hagezi NSFW, Hagezi gambling mini, Sinfonietta snuff: 237,910 domains after deduplication and allowlisting. On 2026-11-16 Hagezi gambling medium replaced mini, because mini only keeps domains on top-site rankings and had shrunk from 111,904 to 48,784 domains in three weeks. |
 | Stack | TypeScript and Vite. No server. |
 
 ## Phases
